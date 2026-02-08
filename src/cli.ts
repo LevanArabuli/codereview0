@@ -3,8 +3,9 @@ import pc from 'picocolors';
 import { parsePRUrl } from './url-parser.js';
 import { checkPrerequisites } from './prerequisites.js';
 import { createOctokit, fetchPRData } from './github.js';
-import { printPRSummary, printErrors, printVerbose } from './output.js';
-import { EXIT_PREREQ, EXIT_INVALID_URL, EXIT_API_ERROR } from './errors.js';
+import { printPRSummary, printErrors, printVerbose, printProgress, printProgressDone, printAnalysisSummary } from './output.js';
+import { analyzeDiff } from './analyzer.js';
+import { EXIT_PREREQ, EXIT_INVALID_URL, EXIT_API_ERROR, EXIT_ANALYSIS_ERROR } from './errors.js';
 
 const program = new Command();
 
@@ -14,7 +15,8 @@ program
   .version('0.1.0')
   .argument('<pr-url>', 'GitHub Pull Request URL')
   .option('-v, --verbose', 'Show debug info including raw diff')
-  .action(async (prUrl: string, options: { verbose?: boolean }) => {
+  .option('--quick', 'Quick review: analyze diff only (default until deep mode)')
+  .action(async (prUrl: string, options: { verbose?: boolean; quick?: boolean }) => {
     // 1. Check prerequisites (collect all failures, report at once)
     const failures = checkPrerequisites();
     if (failures.length > 0) {
@@ -30,25 +32,43 @@ program
       process.exit(EXIT_INVALID_URL);
     }
 
-    // 3. Fetch PR data
+    // 3. Fetch PR data with progress
+    let prData;
     try {
+      printProgress('Fetching PR data...');
       const octokit = createOctokit();
-      const prData = await fetchPRData(octokit, parsed.owner, parsed.repo, parsed.prNumber);
-
-      // 4. Print summary
-      printPRSummary(prData);
-
-      // 5. Verbose output
-      if (options.verbose) {
-        printVerbose(prData);
-      }
+      prData = await fetchPRData(octokit, parsed.owner, parsed.repo, parsed.prNumber);
+      printProgressDone();
     } catch (error: unknown) {
-      // 6. API error handling
+      console.log(); // newline after progress message
       console.error(pc.red('\u2716 Failed to fetch PR data'));
       if (error instanceof Error && error.message) {
         console.error(pc.dim('  ' + error.message));
       }
       process.exit(EXIT_API_ERROR);
+    }
+
+    // Print PR summary so user sees what they're reviewing while waiting for analysis
+    printPRSummary(prData);
+
+    // 4. Analyze diff with progress
+    try {
+      printProgress('Analyzing diff...');
+      const result = await analyzeDiff(prData);
+      printProgressDone();
+      printAnalysisSummary(result.findings);
+    } catch (error: unknown) {
+      console.log(); // newline after progress message
+      console.error(pc.red('Analysis failed'));
+      if (error instanceof Error && error.message) {
+        console.error(error.message);
+      }
+      process.exit(EXIT_ANALYSIS_ERROR);
+    }
+
+    // 5. Verbose output
+    if (options.verbose) {
+      printVerbose(prData);
     }
   });
 

@@ -1,5 +1,6 @@
 import pc from 'picocolors';
 import type { PRData, PrereqFailure } from './types.js';
+import type { ReviewFinding } from './schemas.js';
 
 /**
  * Print a colored compact PR summary with diff-stat file list.
@@ -28,9 +29,6 @@ export function printPRSummary(pr: PRData): void {
     );
   }
 
-  // Blank line + completion message
-  console.log();
-  console.log(pc.green('PR data fetched successfully'));
 }
 
 /**
@@ -62,4 +60,52 @@ export function printVerbose(pr: PRData): void {
     }
   }
   console.log(pc.dim(`(${pr.diff.length} characters)`));
+}
+
+/**
+ * Print a progress message without a trailing newline.
+ * Used for "Fetching PR data..." where " done" is appended on the same line.
+ */
+export function printProgress(message: string): void {
+  process.stdout.write(message);
+}
+
+/**
+ * Complete a progress line by printing " done" in green with a newline.
+ */
+export function printProgressDone(): void {
+  console.log(pc.green(' done'));
+}
+
+/**
+ * Print a summary of findings counts by severity.
+ * Only includes severities with count > 0.
+ */
+export function printAnalysisSummary(findings: ReviewFinding[]): void {
+  const counts: Record<string, number> = {};
+  for (const f of findings) {
+    counts[f.severity] = (counts[f.severity] ?? 0) + 1;
+  }
+
+  const total = findings.length;
+  const parts: string[] = [];
+
+  const severities = ['bug', 'security', 'suggestion', 'nitpick'] as const;
+  for (const severity of severities) {
+    const count = counts[severity];
+    if (count && count > 0) {
+      if (severity === 'bug') {
+        parts.push(`${count} bug${count === 1 ? '' : 's'}`);
+      } else if (severity === 'security') {
+        parts.push(`${count} security`);
+      } else if (severity === 'suggestion') {
+        parts.push(`${count} suggestion${count === 1 ? '' : 's'}`);
+      } else if (severity === 'nitpick') {
+        parts.push(`${count} nitpick${count === 1 ? '' : 's'}`);
+      }
+    }
+  }
+
+  const summary = parts.length > 0 ? `: ${parts.join(', ')}` : '';
+  console.log(`Found ${total} finding${total === 1 ? '' : 's'}${summary}`);
 }
