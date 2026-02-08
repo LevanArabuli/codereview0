@@ -44,10 +44,22 @@ export function printErrors(failures: PrereqFailure[]): void {
 }
 
 /**
- * Print verbose output including raw diff content.
+ * Print verbose output including color-coded raw diff content.
  */
 export function printVerbose(pr: PRData): void {
   console.log(pc.bold('Raw Diff:'));
-  console.log(pr.diff);
+  for (const line of pr.diff.split('\n')) {
+    if (line.startsWith('+') && !line.startsWith('+++')) {
+      console.log(pc.green(line));
+    } else if (line.startsWith('-') && !line.startsWith('---')) {
+      console.log(pc.red(line));
+    } else if (line.startsWith('@@')) {
+      console.log(pc.cyan(line));
+    } else if (line.startsWith('diff ') || line.startsWith('index ')) {
+      console.log(pc.bold(line));
+    } else {
+      console.log(line);
+    }
+  }
   console.log(pc.dim(`(${pr.diff.length} characters)`));
 }
