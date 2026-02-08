@@ -6,3 +6,6 @@ export const EXIT_INVALID_URL = 2;
 
 /** Exit code for GitHub API failures */
 export const EXIT_API_ERROR = 3;
+
+/** Exit code for analysis failures (Claude CLI invocation or response parsing) */
+export const EXIT_ANALYSIS_ERROR = 4;
