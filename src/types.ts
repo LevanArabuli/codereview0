@@ -36,3 +36,9 @@ export interface PrereqFailure {
   message: string;
   help: string;
 }
+
+/** A hunk range from a unified diff (new-file side) */
+export interface DiffHunk {
+  newStart: number;
+  newCount: number;
+}
