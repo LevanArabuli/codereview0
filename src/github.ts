@@ -81,3 +81,65 @@ export async function fetchPRData(
     diff: diffResponse.data,
   };
 }
+
+/**
+ * Post a code review to a GitHub pull request.
+ *
+ * Creates a PENDING review by omitting the `event` parameter entirely.
+ * The user manually submits the review through the GitHub UI.
+ *
+ * If a 422 error occurs (invalid comment positions), falls back to posting
+ * all findings in the review body with no inline comments.
+ *
+ * @returns The review HTML URL
+ */
+export async function postReview(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  prNumber: number,
+  headSha: string,
+  body: string,
+  comments: Array<{ path: string; line: number; side: string; body: string }>,
+): Promise<string> {
+  try {
+    // PENDING state: achieved by OMITTING `event` (not by passing "PENDING")
+    // Valid event values are APPROVE, REQUEST_CHANGES, COMMENT, DISMISS.
+    // Omitting event entirely creates a pending/draft review.
+    const response = await octokit.pulls.createReview({
+      owner,
+      repo,
+      pull_number: prNumber,
+      commit_id: headSha,
+      body,
+      comments,
+    });
+
+    return response.data.html_url;
+  } catch (error: unknown) {
+    // 422 fallback: if inline comments target invalid positions,
+    // promote all findings to the body and retry without comments
+    const status = (error as { status?: number }).status;
+    if (status === 422 && comments.length > 0) {
+      // Build fallback body: original body + inline comments as text
+      let fallbackBody = body;
+      fallbackBody += '\n\n---\n\n**Inline comments could not be posted** (promoted to review body):\n';
+      for (const c of comments) {
+        fallbackBody += `\n**\`${c.path}:${c.line}\`**\n${c.body}\n`;
+      }
+
+      const response = await octokit.pulls.createReview({
+        owner,
+        repo,
+        pull_number: prNumber,
+        commit_id: headSha,
+        body: fallbackBody,
+        comments: [],
+      });
+
+      return response.data.html_url;
+    }
+
+    throw error;
+  }
+}
