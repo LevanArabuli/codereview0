@@ -1,0 +1,85 @@
+import { execFile as execFileCb } from 'node:child_process';
+import { access, rm } from 'node:fs/promises';
+import * as path from 'node:path';
+import * as readline from 'node:readline/promises';
+import { promisify } from 'node:util';
+
+const execFile = promisify(execFileCb);
+
+/** Clone timeout: 1 minute */
+const CLONE_TIMEOUT_MS = 60_000;
+
+/**
+ * Get the local clone path for a repository.
+ * Clones go into `.codereview/<repoName>` under the current working directory.
+ */
+export function getClonePath(repoName: string): string {
+  return path.join(process.cwd(), '.codereview', repoName);
+}
+
+/**
+ * Shallow-clone a repository using `gh repo clone` for automatic authentication.
+ *
+ * Clones the specific PR head branch at depth 1 (single-branch).
+ * If the target directory already exists, it is removed before cloning.
+ *
+ * For fork PRs, headRepoOwner/headRepoName will differ from the base repo,
+ * ensuring we clone the fork (where the PR branch lives).
+ */
+export async function cloneRepo(
+  headRepoOwner: string,
+  headRepoName: string,
+  headBranch: string,
+  targetDir: string,
+): Promise<void> {
+  // Remove existing clone directory if present
+  try {
+    await access(targetDir);
+    await rm(targetDir, { recursive: true, force: true });
+  } catch {
+    // Directory doesn't exist -- nothing to remove
+  }
+
+  const p = execFile(
+    'gh',
+    [
+      'repo', 'clone',
+      `${headRepoOwner}/${headRepoName}`,
+      targetDir,
+      '--',
+      '--depth', '1',
+      '--branch', headBranch,
+      '--single-branch',
+    ],
+    { timeout: CLONE_TIMEOUT_MS },
+  );
+
+  // Prevent stdin hang (established pattern from analyzer.ts)
+  p.child.stdin?.end();
+
+  await p;
+}
+
+/**
+ * Prompt the user to keep or delete the cloned repository after review.
+ * Defaults to removing the clone (N) if the user presses enter or types anything other than 'y'.
+ */
+export async function promptCleanup(clonePath: string): Promise<void> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  try {
+    const answer = await rl.question(`\nKeep cloned repo at ${clonePath}? (y/N) `);
+
+    if (answer.trim().toLowerCase() === 'y') {
+      console.log('Clone kept.');
+    } else {
+      await rm(clonePath, { recursive: true, force: true });
+      console.log('Clone removed.');
+    }
+  } finally {
+    rl.close();
+  }
+}
