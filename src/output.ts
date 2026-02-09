@@ -127,6 +127,13 @@ const SEVERITY_ICONS: Record<string, string> = {
 };
 
 /**
+ * Print a summary line showing how many files were analyzed during deep exploration.
+ */
+export function printExplorationSummary(filesAnalyzed: number): void {
+  console.log(pc.dim(`  ${filesAnalyzed} files analyzed`));
+}
+
+/**
  * Print findings grouped by file with color-coded severity icons.
  * Findings within each file are sorted by severity (bug > security > suggestion > nitpick).
  * Nitpick findings are rendered entirely in dim text.
