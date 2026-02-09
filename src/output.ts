@@ -109,3 +109,66 @@ export function printAnalysisSummary(findings: ReviewFinding[]): void {
   const summary = parts.length > 0 ? `: ${parts.join(', ')}` : '';
   console.log(`Found ${total} finding${total === 1 ? '' : 's'}${summary}`);
 }
+
+/** Severity sort order: lower index = higher priority */
+const SEVERITY_ORDER: Record<string, number> = {
+  bug: 0,
+  security: 1,
+  suggestion: 2,
+  nitpick: 3,
+};
+
+/** Color-coded severity icons for terminal display */
+const SEVERITY_ICONS: Record<string, string> = {
+  bug: pc.red('\u2716 bug'),
+  security: pc.yellow('\u26A0 security'),
+  suggestion: pc.blue('\u25C6 suggestion'),
+  nitpick: pc.dim('\u25CB nitpick'),
+};
+
+/**
+ * Print findings grouped by file with color-coded severity icons.
+ * Findings within each file are sorted by severity (bug > security > suggestion > nitpick).
+ * Nitpick findings are rendered entirely in dim text.
+ * Empty findings array produces no output.
+ */
+export function printFindings(findings: ReviewFinding[]): void {
+  if (findings.length === 0) return;
+
+  // Group findings by file
+  const byFile = new Map<string, ReviewFinding[]>();
+  for (const f of findings) {
+    const group = byFile.get(f.file);
+    if (group) {
+      group.push(f);
+    } else {
+      byFile.set(f.file, [f]);
+    }
+  }
+
+  // Print each file group
+  for (const [file, fileFindings] of byFile) {
+    // Sort by severity within file
+    fileFindings.sort(
+      (a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9),
+    );
+
+    // File header with finding count
+    const count = fileFindings.length;
+    console.log(`\n${pc.bold(file)} (${count} finding${count === 1 ? '' : 's'})`);
+
+    // Each finding
+    for (const f of fileFindings) {
+      const icon = SEVERITY_ICONS[f.severity] ?? f.severity;
+      const lineRef = pc.dim('L' + f.line);
+      const confidence = pc.dim('[' + f.confidence + ']');
+
+      if (f.severity === 'nitpick') {
+        // Entire nitpick line rendered in dim
+        console.log(pc.dim(`  \u25CB nitpick L${f.line} [${f.confidence}] ${f.description}`));
+      } else {
+        console.log(`  ${icon} ${lineRef} ${confidence} ${f.description}`);
+      }
+    }
+  }
+}
