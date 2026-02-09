@@ -14,6 +14,8 @@ export interface PRData {
   baseBranch: string;
   headBranch: string;
   headSha: string;
+  headRepoOwner: string;
+  headRepoName: string;
   additions: number;
   deletions: number;
   changedFiles: number;

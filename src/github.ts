@@ -74,6 +74,8 @@ export async function fetchPRData(
     baseBranch: pr.base.ref,
     headBranch: pr.head.ref,
     headSha: pr.head.sha,
+    headRepoOwner: pr.head.repo?.owner?.login ?? owner,
+    headRepoName: pr.head.repo?.name ?? repo,
     additions: pr.additions,
     deletions: pr.deletions,
     changedFiles: pr.changed_files,
