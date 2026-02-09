@@ -1,6 +1,6 @@
 import { execFile as execFileCb } from 'node:child_process';
 import { promisify } from 'node:util';
-import { ReviewResultSchema, reviewJsonSchema } from './schemas.js';
+import { ReviewResultSchema } from './schemas.js';
 import { buildPrompt } from './prompt.js';
 import type { PRData } from './types.js';
 import type { ReviewResult } from './schemas.js';
@@ -43,22 +43,20 @@ export async function analyzeDiff(prData: PRData): Promise<ReviewResult> {
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
-      const { stdout } = await execFile('claude', [
+      const p = execFile('claude', [
         '-p',
         prompt,
         '--output-format',
         'json',
-        '--json-schema',
-        reviewJsonSchema,
         '--max-turns',
         '1',
-        '--tools',
-        '',
       ], {
         timeout: ANALYSIS_TIMEOUT_MS,
         maxBuffer: MAX_BUFFER,
         encoding: 'utf-8',
       });
+      p.child.stdin?.end();
+      const { stdout } = await p;
 
       // Double JSON parse: first the Claude CLI wrapper, then the result
       const wrapper: ClaudeResponse = JSON.parse(stdout);
@@ -67,17 +65,18 @@ export async function analyzeDiff(prData: PRData): Promise<ReviewResult> {
         throw new Error(`Claude CLI error: ${wrapper.result}`);
       }
 
-      // Parse the result field -- may be a JSON string or already an object
+      // Parse result: try direct JSON parse, then extract JSON from text
       let data: unknown;
-      if (typeof wrapper.result === 'string') {
-        try {
-          data = JSON.parse(wrapper.result);
-        } catch {
-          // If JSON.parse fails, result might already be parsed (shouldn't happen, but handle gracefully)
-          data = wrapper.result;
+      try {
+        data = JSON.parse(wrapper.result);
+      } catch {
+        // Result may contain text around JSON — extract the JSON object
+        const match = wrapper.result.match(/\{[\s\S]*"findings"[\s\S]*\}/);
+        if (match) {
+          data = JSON.parse(match[0]);
+        } else {
+          throw new Error('Could not find JSON in Claude response');
         }
-      } else {
-        data = wrapper.result;
       }
 
       // Validate against Zod schema

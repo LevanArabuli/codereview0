@@ -41,5 +41,9 @@ For each issue found, provide:
 
 Focus on the CHANGED code (lines with + prefix in the diff). Only flag issues in unchanged context lines if they are directly affected by the changes.
 
-Report all issues you find. Do not filter or limit the count. If you find no issues, return an empty findings array.`;
+Report all issues you find. Do not filter or limit the count. If you find no issues, return an empty findings array.
+
+IMPORTANT: Respond with ONLY a valid JSON object matching this exact structure — no explanation, no markdown, no tool calls:
+{"findings": [{"file": "string", "line": number, "severity": "bug"|"security"|"suggestion"|"nitpick", "confidence": "high"|"medium"|"low", "category": "string", "description": "string"}]}
+Optional fields per finding: "endLine" (number), "suggestedFix" (string), "relatedLocations" ([{"file": "string", "line": number, "reason": "string"}])`;
 }
