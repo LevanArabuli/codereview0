@@ -47,3 +47,73 @@ IMPORTANT: Respond with ONLY a valid JSON object matching this exact structure â
 {"findings": [{"file": "string", "line": number, "severity": "bug"|"security"|"suggestion"|"nitpick", "confidence": "high"|"medium"|"low", "category": "string", "description": "string"}]}
 Optional fields per finding: "endLine" (number), "suggestedFix" (string), "relatedLocations" ([{"file": "string", "line": number, "reason": "string"}])`;
 }
+
+/**
+ * Build a deep exploration prompt that guides Claude's agentic codebase analysis.
+ *
+ * Unlike buildPrompt (diff-only), this prompt instructs Claude to use Read, Grep,
+ * and Glob tools to explore the repository beyond the diff, finding cross-file
+ * impacts, broken callers, missing updates, and pattern violations.
+ */
+export function buildDeepPrompt(prData: PRData): string {
+  const description = prData.body || '(no description provided)';
+  const changedFileList = prData.files.map(f => `- ${f.filename} (${f.status}: +${f.additions} -${f.deletions})`).join('\n');
+
+  return `You are a senior software engineer performing a deep codebase analysis of a pull request. Your goal is to find cross-file impacts -- issues that are NOT visible from the diff alone but require understanding how the changes interact with the rest of the codebase.
+
+<pr_metadata>
+Title: ${prData.title}
+Description: ${description}
+Branch: ${prData.headBranch} -> ${prData.baseBranch}
+Changed files: ${prData.changedFiles} (+${prData.additions} -${prData.deletions})
+</pr_metadata>
+
+<changed_files>
+${changedFileList}
+</changed_files>
+
+<diff_summary>
+The diff modifies ${prData.changedFiles} file(s) with ${prData.additions} additions and ${prData.deletions} deletions.
+Review the diff below to understand what changed, then explore the codebase to find cross-file impacts.
+</diff_summary>
+
+<diff>
+${prData.diff}
+</diff>
+
+## Your Exploration Strategy
+
+Follow this approach to find cross-file issues:
+
+1. **Read the changed files** to understand the modifications in full context.
+2. **Use Grep to find callers and consumers** of any changed functions, classes, types, or exports. Search for function names, type names, and import paths that were modified.
+3. **Use Glob to discover related files** in the same module, directory, or package. Look for files that follow similar naming patterns or belong to the same feature area.
+4. **Read relevant snippets** from discovered files -- focus on the specific lines that reference the changed code, not entire files.
+
+## Constraints
+
+- Explore at most **25 files** beyond the changed files. Prioritize files that directly import from or are imported by the changed files.
+- Read only relevant sections of discovered files, not entire files.
+- Focus on files that import from or are imported by the changed files.
+- Skip test files, documentation, and configuration files unless they are directly relevant to a cross-file impact.
+- Do **NOT** report issues that are already visible in the diff alone. Only report issues that require cross-file context to identify.
+
+## What to Look For
+
+1. **Broken callers** (severity: "bug"): Functions, methods, or APIs whose signature or behavior changed in the diff, but callers elsewhere in the codebase still expect the old signature or behavior.
+2. **Missing updates** (severity: "bug"): Other files that need corresponding changes to remain consistent with the diff (e.g., shared constants, configuration, type definitions not updated).
+3. **Pattern violations** (severity: "suggestion"): The changes break patterns or conventions established elsewhere in the codebase (e.g., error handling style, naming conventions, architectural layers).
+4. **Interface mismatches** (severity: "bug"): Type or interface changes in the diff that are not propagated to all implementations, consumers, or dependents.
+
+## Output Requirements
+
+- Every finding MUST include a \`relatedLocations\` array listing the changed file(s) from this PR that caused the cross-file impact. This connects each finding back to the PR changes.
+- Use "bug" severity for broken callers, missing updates, and interface mismatches.
+- Use "suggestion" severity for pattern violations.
+- Use "high" confidence when you can see both the change and the broken consumer. Use "medium" when the impact is likely but not certain. Use "low" when the impact is speculative.
+- If you find no cross-file issues, return an empty findings array. This is a valid and expected outcome for well-contained changes.
+
+IMPORTANT: Respond with ONLY a valid JSON object matching this exact structure -- no explanation, no markdown, no tool calls:
+{"findings": [{"file": "string", "line": number, "severity": "bug"|"security"|"suggestion"|"nitpick", "confidence": "high"|"medium"|"low", "category": "string", "description": "string"}]}
+Optional fields per finding: "endLine" (number), "suggestedFix" (string), "relatedLocations" ([{"file": "string", "line": number, "reason": "string"}])`;
+}
