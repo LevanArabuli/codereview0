@@ -43,6 +43,8 @@ Focus on the CHANGED code (lines with + prefix in the diff). Only flag issues in
 
 Report all issues you find. Do not filter or limit the count. If you find no issues, return an empty findings array.
 
+If test files appear in the diff alongside source files, briefly assess whether the test changes adequately cover the source changes. If source files are changed but related test files in the diff appear to have insufficient coverage for the changes, mention this as a suggestion. Only observe test coverage for files actually present in the diff -- do not speculate about test files not included in the diff.
+
 IMPORTANT: Respond with ONLY a valid JSON object matching this exact structure — no explanation, no markdown, no tool calls:
 {"findings": [{"file": "string", "line": number, "severity": "bug"|"security"|"suggestion"|"nitpick", "confidence": "high"|"medium"|"low", "category": "string", "description": "string"}]}
 Optional fields per finding: "endLine" (number), "suggestedFix" (string), "relatedLocations" ([{"file": "string", "line": number, "reason": "string"}])`;
