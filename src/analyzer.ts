@@ -16,11 +16,11 @@ const MAX_BUFFER = 10 * 1024 * 1024;
 /** Max number of analysis attempts (1 initial + 1 retry) */
 const MAX_ATTEMPTS = 2;
 
-/** Deep exploration timeout: 2 minutes */
-const EXPLORATION_TIMEOUT_MS = 2 * 60 * 1000;
+/** Deep exploration timeout: 4 minutes */
+const EXPLORATION_TIMEOUT_MS = 4 * 60 * 1000;
 
 /** Max agentic exploration turns for deep mode */
-const MAX_EXPLORATION_TURNS = 15;
+const MAX_EXPLORATION_TURNS = 25;
 
 /** Shape of the JSON wrapper returned by Claude CLI --output-format json */
 interface ClaudeResponse {
@@ -68,7 +68,7 @@ export async function analyzeDiff(prData: PRData): Promise<ReviewResult> {
       const wrapper: ClaudeResponse = JSON.parse(stdout);
 
       if (wrapper.is_error || wrapper.subtype !== 'success') {
-        throw new Error(`Claude CLI error: ${wrapper.result}`);
+        throw new Error(`Claude CLI error: ${wrapper.result ?? 'unknown error'}`);
       }
 
       // Parse result: try direct JSON parse, then extract JSON from text
@@ -149,7 +149,7 @@ export async function analyzeDeep(prData: PRData, clonePath: string): Promise<Re
     const wrapper: ClaudeResponse = JSON.parse(stdout);
 
     if (wrapper.is_error || wrapper.subtype !== 'success') {
-      throw new Error(`Claude CLI error: ${wrapper.result}`);
+      throw new Error(`Claude CLI error: ${wrapper.result ?? 'unknown error'}`);
     }
 
     // Parse result: try direct JSON parse, then extract JSON from text
