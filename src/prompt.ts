@@ -1,5 +1,23 @@
 import type { PRData } from './types.js';
 
+/** Maximum diff size in characters before truncation (~80KB, safe for Claude context window) */
+const MAX_DIFF_CHARS = 80_000;
+
+/**
+ * Truncate a diff to fit within the Claude context window.
+ * Returns the original diff if within limits, or a truncated version with a warning.
+ */
+function truncateDiff(diff: string): string {
+  if (diff.length <= MAX_DIFF_CHARS) {
+    return diff;
+  }
+  const truncated = diff.slice(0, MAX_DIFF_CHARS);
+  // Try to cut at the last complete file boundary (diff --git line)
+  const lastFileBoundary = truncated.lastIndexOf('\ndiff --git');
+  const cutPoint = lastFileBoundary > MAX_DIFF_CHARS * 0.5 ? lastFileBoundary : MAX_DIFF_CHARS;
+  return truncated.slice(0, cutPoint) + '\n\n[... diff truncated — remaining files omitted due to size. Focus review on the files shown above.]';
+}
+
 /**
  * Build a complete review prompt from PR data for Claude CLI analysis.
  *
@@ -21,7 +39,7 @@ Changed files: ${prData.changedFiles} (+${prData.additions} -${prData.deletions}
 </pr_metadata>
 
 <diff>
-${prData.diff}
+${truncateDiff(prData.diff)}
 </diff>
 
 For each issue found, provide:
@@ -80,7 +98,7 @@ Review the diff below to understand what changed, then explore the codebase to f
 </diff_summary>
 
 <diff>
-${prData.diff}
+${truncateDiff(prData.diff)}
 </diff>
 
 ## Your Exploration Strategy
@@ -101,7 +119,7 @@ Follow this approach to find cross-file issues:
 - Read only relevant sections of discovered files, not entire files.
 - Focus on files that import from or are imported by the changed files.
 - Skip documentation and configuration files unless directly relevant to a cross-file impact.
-- Do **NOT** report issues that are already visible in the diff alone. Only report issues that require cross-file context to identify.
+- Do **NOT** report issues that are already visible in the diff alone (e.g., typos, simple logic errors, style issues that need no codebase context). Only report issues that require cross-file context to identify. Exception: test coverage gaps (item 5) and pattern alignment observations (item 6) are always in scope -- these inherently require codebase exploration to assess.
 
 ## What to Look For
 
