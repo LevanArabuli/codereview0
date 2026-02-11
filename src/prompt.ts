@@ -89,13 +89,16 @@ Follow this approach to find cross-file issues:
 2. **Use Grep to find callers and consumers** of any changed functions, classes, types, or exports. Search for function names, type names, and import paths that were modified.
 3. **Use Glob to discover related files** in the same module, directory, or package. Look for files that follow similar naming patterns or belong to the same feature area.
 4. **Read relevant snippets** from discovered files -- focus on the specific lines that reference the changed code, not entire files.
+5. **Discover test files** for the changed code. First try naming conventions: use Glob to find \`*.test.*\`, \`*.spec.*\` files matching changed source file names, and \`__tests__/\`, \`test/\`, \`tests/\` directories near the changed files. If no test files found via naming, use Grep to search for imports of the changed modules across test directories. Read discovered test files to learn the project's test framework and existing test conventions.
+6. **Observe codebase patterns** while exploring related files. Note how the rest of the codebase handles error handling, naming, architecture, API style, async patterns, logging, and code organization. Compare the changed code's approach against these patterns.
 
 ## Constraints
 
-- Explore at most **25 files** beyond the changed files. Prioritize files that directly import from or are imported by the changed files.
+- Explore at most **25 files** beyond the changed files for cross-file impact analysis. Prioritize files that directly import from or are imported by the changed files.
+- Explore up to an additional **10 test files** for test coverage assessment. Test files do NOT count against the 25-file code exploration cap.
 - Read only relevant sections of discovered files, not entire files.
 - Focus on files that import from or are imported by the changed files.
-- Skip test files, documentation, and configuration files unless they are directly relevant to a cross-file impact.
+- Skip documentation and configuration files unless directly relevant to a cross-file impact.
 - Do **NOT** report issues that are already visible in the diff alone. Only report issues that require cross-file context to identify.
 
 ## What to Look For
@@ -104,6 +107,21 @@ Follow this approach to find cross-file issues:
 2. **Missing updates** (severity: "bug"): Other files that need corresponding changes to remain consistent with the diff (e.g., shared constants, configuration, type definitions not updated).
 3. **Pattern violations** (severity: "suggestion"): The changes break patterns or conventions established elsewhere in the codebase (e.g., error handling style, naming conventions, architectural layers).
 4. **Interface mismatches** (severity: "bug"): Type or interface changes in the diff that are not propagated to all implementations, consumers, or dependents.
+5. **Test coverage gaps** for changed code (severity varies):
+   - Discover test files for the changed modules using the strategy in step 5 above.
+   - Read discovered test files to identify the test framework (Jest, Vitest, pytest, Go testing, etc.) and existing test conventions.
+   - Classify the coverage situation:
+     - **No tests exist** for the changed module at all (severity: "suggestion", or "bug" if the changed code is critical logic like auth, payments, or data integrity): Report this and suggest what should be tested, referencing the project's actual test framework and conventions.
+     - **Tests exist but don't cover the changed function/path** (severity: "suggestion"): Name the existing test file, note what it covers, and suggest what additional coverage is needed for the changed code.
+     - **Tests exist but miss edge cases introduced by the changes** (severity: "nitpick"): Name the specific edge cases the changed code introduces.
+   - When suggesting what to test, be specific for simple cases (e.g., "test that parseUrl returns null for empty string") and suggest categories for complex cases (e.g., "add integration tests for the new auth flow covering success, failure, and timeout scenarios").
+   - Always reference the actual test framework used in the project (e.g., "Add a Vitest describe block in tests/analyzer.test.ts" not just "add tests").
+6. **Pattern misalignment** with codebase conventions (severity: "suggestion" or "nitpick"):
+   - While exploring the codebase for cross-file impacts, observe the patterns used in related files: error handling style, naming conventions, architectural layers, code organization, API style (function signatures, parameter patterns, return types), async patterns, logging patterns, and type patterns.
+   - If the changed code deviates from an established codebase pattern, report as "suggestion" for meaningful deviations (different error handling strategy, different architectural approach) or "nitpick" for minor deviations (naming style, formatting preference).
+   - A pattern requires at least 2-3 instances in the codebase to be considered "established." A single file doing something differently is just variation, not a violation.
+   - If the codebase itself is inconsistent about a pattern (e.g., some files use pattern A, others use pattern B), report the inconsistency as a single "nitpick" finding rather than recommending either approach.
+   - Include a brief code example from the codebase when it helps illustrate the established pattern. Skip examples when the pattern is obvious from the description.
 
 ## Output Requirements
 
