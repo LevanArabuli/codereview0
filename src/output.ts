@@ -118,6 +118,13 @@ const SEVERITY_ORDER: Record<string, number> = {
   nitpick: 3,
 };
 
+/** Confidence sort order: lower index = higher priority */
+const CONFIDENCE_ORDER: Record<string, number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+};
+
 /** Color-coded severity icons for terminal display */
 const SEVERITY_ICONS: Record<string, string> = {
   bug: pc.red('\u2716 bug'),
@@ -134,48 +141,40 @@ export function printExplorationSummary(filesAnalyzed: number): void {
 }
 
 /**
- * Print findings grouped by file with color-coded severity icons.
- * Findings within each file are sorted by severity (bug > security > suggestion > nitpick).
+ * Print findings sorted globally by severity (bug > security > suggestion > nitpick),
+ * then by confidence (high > medium > low) within same severity.
+ * Each finding shows file:line inline. No file grouping or section headers.
  * Nitpick findings are rendered entirely in dim text.
  * Empty findings array produces no output.
  */
 export function printFindings(findings: ReviewFinding[]): void {
   if (findings.length === 0) return;
 
-  // Group findings by file
-  const byFile = new Map<string, ReviewFinding[]>();
-  for (const f of findings) {
-    const group = byFile.get(f.file);
-    if (group) {
-      group.push(f);
+  // Sort globally: severity first, confidence second, file+line for determinism
+  const sorted = [...findings].sort((a, b) => {
+    const sevA = SEVERITY_ORDER[a.severity] ?? 9;
+    const sevB = SEVERITY_ORDER[b.severity] ?? 9;
+    if (sevA !== sevB) return sevA - sevB;
+    const confA = CONFIDENCE_ORDER[a.confidence] ?? 9;
+    const confB = CONFIDENCE_ORDER[b.confidence] ?? 9;
+    if (confA !== confB) return confA - confB;
+    // Tertiary: file then line for deterministic output
+    const fileComp = a.file.localeCompare(b.file);
+    if (fileComp !== 0) return fileComp;
+    return a.line - b.line;
+  });
+
+  // Print flat list with file:line inline (no file headers, no section headers)
+  for (const f of sorted) {
+    const icon = SEVERITY_ICONS[f.severity] ?? f.severity;
+    const location = pc.dim(`${f.file}:${f.line}`);
+    const confidence = pc.dim(`[${f.confidence}]`);
+
+    if (f.severity === 'nitpick') {
+      // Entire nitpick line rendered in dim
+      console.log(pc.dim(`  \u25CB nitpick ${f.file}:${f.line} [${f.confidence}] ${f.description}`));
     } else {
-      byFile.set(f.file, [f]);
-    }
-  }
-
-  // Print each file group
-  for (const [file, fileFindings] of byFile) {
-    // Sort by severity within file
-    fileFindings.sort(
-      (a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9),
-    );
-
-    // File header with finding count
-    const count = fileFindings.length;
-    console.log(`\n${pc.bold(file)} (${count} finding${count === 1 ? '' : 's'})`);
-
-    // Each finding
-    for (const f of fileFindings) {
-      const icon = SEVERITY_ICONS[f.severity] ?? f.severity;
-      const lineRef = pc.dim('L' + f.line);
-      const confidence = pc.dim('[' + f.confidence + ']');
-
-      if (f.severity === 'nitpick') {
-        // Entire nitpick line rendered in dim
-        console.log(pc.dim(`  \u25CB nitpick L${f.line} [${f.confidence}] ${f.description}`));
-      } else {
-        console.log(`  ${icon} ${lineRef} ${confidence} ${f.description}`);
-      }
+      console.log(`  ${icon} ${location} ${confidence} ${f.description}`);
     }
   }
 }

@@ -58,9 +58,6 @@ program
     // Print PR summary so user sees what they're reviewing while waiting for analysis
     printPRSummary(prData);
 
-    // Severity sort order for merging findings
-    const SEVERITY_ORDER: Record<string, number> = { bug: 0, security: 1, suggestion: 2, nitpick: 3 };
-
     let findings;
 
     if (options.deep) {
@@ -110,12 +107,8 @@ program
         }
       }
 
-      // 4d. Merge findings sorted by severity, then by file
-      findings = [...quickFindings, ...deepFindings].sort((a, b) => {
-        const sa = SEVERITY_ORDER[a.severity] ?? 9;
-        const sb = SEVERITY_ORDER[b.severity] ?? 9;
-        return sa !== sb ? sa - sb : a.file.localeCompare(b.file);
-      });
+      // 4d. Merge findings (printFindings owns sorting)
+      findings = [...quickFindings, ...deepFindings];
 
       // 5. Terminal output (always shown)
       printAnalysisSummary(findings);
