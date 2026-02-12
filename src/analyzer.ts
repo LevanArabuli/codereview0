@@ -1,9 +1,9 @@
-import { execFile as execFileCb } from 'node:child_process';
-import { promisify } from 'node:util';
-import { ReviewResultSchema } from './schemas.js';
-import { buildPrompt, buildDeepPrompt } from './prompt.js';
-import type { PRData } from './types.js';
-import type { ReviewResult } from './schemas.js';
+import { execFile as execFileCb } from "node:child_process";
+import { promisify } from "node:util";
+import { ReviewResultSchema } from "./schemas.js";
+import { buildPrompt, buildDeepPrompt } from "./prompt.js";
+import type { PRData } from "./types.js";
+import type { ReviewResult } from "./schemas.js";
 
 const execFile = promisify(execFileCb);
 
@@ -22,6 +22,7 @@ const EXPLORATION_TIMEOUT_MS = 4 * 60 * 1000;
 /** Max agentic exploration turns for deep mode */
 const MAX_EXPLORATION_TURNS = 25;
 
+const MAX_ANALYSIS_TURNS = 10;
 /** Shape of the JSON wrapper returned by Claude CLI --output-format json */
 interface ClaudeResponse {
   type: string;
@@ -42,33 +43,43 @@ interface ClaudeResponse {
  * Zod-derived JSON Schema constraint. Implements double JSON parsing
  * (wrapper + result), Zod validation, retry-once logic, and 5-minute timeout.
  */
-export async function analyzeDiff(prData: PRData): Promise<ReviewResult> {
+export async function analyzeDiff(prData: PRData, model?: string): Promise<ReviewResult> {
   const prompt = buildPrompt(prData);
 
   let lastError: Error | undefined;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
-      const p = execFile('claude', [
-        '-p',
+      const args = [
+        "-p",
         prompt,
-        '--output-format',
-        'json',
-        '--max-turns',
-        '1',
-      ], {
-        timeout: ANALYSIS_TIMEOUT_MS,
-        maxBuffer: MAX_BUFFER,
-        encoding: 'utf-8',
-      });
+        "--output-format",
+        "json",
+        "--max-turns",
+        String(MAX_ANALYSIS_TURNS),
+      ];
+      if (model) {
+        args.push("--model", model);
+      }
+      const p = execFile(
+        "claude",
+        args,
+        {
+          timeout: ANALYSIS_TIMEOUT_MS,
+          maxBuffer: MAX_BUFFER,
+          encoding: "utf-8",
+        },
+      );
       p.child.stdin?.end();
       const { stdout } = await p;
 
       // Double JSON parse: first the Claude CLI wrapper, then the result
       const wrapper: ClaudeResponse = JSON.parse(stdout);
 
-      if (wrapper.is_error || wrapper.subtype !== 'success') {
-        throw new Error(`Claude CLI error: ${wrapper.result ?? 'unknown error'}`);
+      if (wrapper.is_error || wrapper.subtype !== "success") {
+        throw new Error(
+          `Claude CLI error: ${wrapper.result ?? "unknown error"}`,
+        );
       }
 
       // Parse result: try direct JSON parse, then extract JSON from text
@@ -81,7 +92,7 @@ export async function analyzeDiff(prData: PRData): Promise<ReviewResult> {
         if (match) {
           data = JSON.parse(match[0]);
         } else {
-          throw new Error('Could not find JSON in Claude response');
+          throw new Error("Could not find JSON in Claude response");
         }
       }
 
@@ -94,9 +105,13 @@ export async function analyzeDiff(prData: PRData): Promise<ReviewResult> {
       return parsed.data;
     } catch (error: unknown) {
       // Check for timeout (execFile sets killed=true when process is killed due to timeout)
-      if (error instanceof Error && 'killed' in error && (error as NodeJS.ErrnoException & { killed?: boolean }).killed) {
+      if (
+        error instanceof Error &&
+        "killed" in error &&
+        (error as NodeJS.ErrnoException & { killed?: boolean }).killed
+      ) {
         throw new Error(
-          'Analysis timed out after 5 minutes. The PR diff may be too large for quick review.',
+          "Analysis timed out after 5 minutes. The PR diff may be too large for quick review.",
         );
       }
 
@@ -110,7 +125,7 @@ export async function analyzeDiff(prData: PRData): Promise<ReviewResult> {
   }
 
   // Both attempts failed -- throw the last error
-  throw lastError ?? new Error('Analysis failed');
+  throw lastError ?? new Error("Analysis failed");
 }
 
 /**
@@ -123,33 +138,45 @@ export async function analyzeDiff(prData: PRData): Promise<ReviewResult> {
  * On timeout or error, returns empty findings (graceful degradation) so that
  * quick-mode findings still carry the review.
  */
-export async function analyzeDeep(prData: PRData, clonePath: string): Promise<ReviewResult> {
+export async function analyzeDeep(
+  prData: PRData,
+  clonePath: string,
+  model?: string,
+): Promise<ReviewResult> {
   const prompt = buildDeepPrompt(prData);
 
   try {
-    const p = execFile('claude', [
-      '-p',
+    const args = [
+      "-p",
       prompt,
-      '--max-turns',
+      "--max-turns",
       String(MAX_EXPLORATION_TURNS),
-      '--tools',
-      'Read,Grep,Glob',
-      '--output-format',
-      'json',
-    ], {
-      cwd: clonePath,
-      timeout: EXPLORATION_TIMEOUT_MS,
-      maxBuffer: MAX_BUFFER,
-      encoding: 'utf-8',
-    });
+      "--tools",
+      "Read,Grep,Glob",
+      "--output-format",
+      "json",
+    ];
+    if (model) {
+      args.push("--model", model);
+    }
+    const p = execFile(
+      "claude",
+      args,
+      {
+        cwd: clonePath,
+        timeout: EXPLORATION_TIMEOUT_MS,
+        maxBuffer: MAX_BUFFER,
+        encoding: "utf-8",
+      },
+    );
     p.child.stdin?.end();
     const { stdout } = await p;
 
     // Double JSON parse: first the Claude CLI wrapper, then the result
     const wrapper: ClaudeResponse = JSON.parse(stdout);
 
-    if (wrapper.is_error || wrapper.subtype !== 'success') {
-      throw new Error(`Claude CLI error: ${wrapper.result ?? 'unknown error'}`);
+    if (wrapper.is_error || wrapper.subtype !== "success") {
+      throw new Error(`Claude CLI error: ${wrapper.result ?? "unknown error"}`);
     }
 
     // Parse result: try direct JSON parse, then extract JSON from text
@@ -161,7 +188,7 @@ export async function analyzeDeep(prData: PRData, clonePath: string): Promise<Re
       if (match) {
         data = JSON.parse(match[0]);
       } else {
-        throw new Error('Could not find JSON in Claude response');
+        throw new Error("Could not find JSON in Claude response");
       }
     }
 
@@ -176,16 +203,20 @@ export async function analyzeDeep(prData: PRData, clonePath: string): Promise<Re
     // Check for timeout (execFile sets killed=true when process is killed due to timeout)
     if (
       error instanceof Error &&
-      'killed' in error &&
+      "killed" in error &&
       (error as NodeJS.ErrnoException & { killed?: boolean }).killed
     ) {
-      console.error('Deep exploration timed out -- proceeding with quick analysis only');
+      console.error(
+        "Deep exploration timed out -- proceeding with quick analysis only",
+      );
       return { findings: [] };
     }
 
     // All other errors: degrade gracefully to empty findings
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`Deep exploration failed: ${message} -- proceeding with quick analysis only`);
+    console.error(
+      `Deep exploration failed: ${message} -- proceeding with quick analysis only`,
+    );
     return { findings: [] };
   }
 }

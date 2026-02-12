@@ -58,10 +58,10 @@ describe('printPRSummary', () => {
     expect(output).toContain('src/bar.ts');
   });
 
-  it('prints completion message', () => {
+  it('prints diff stats summary', () => {
     printPRSummary(mockPR);
     const output = logSpy.mock.calls.map((c) => c[0]).join('\n');
-    expect(output).toContain('PR data fetched successfully');
+    expect(output).toContain('2 files changed');
   });
 });
 

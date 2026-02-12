@@ -22,7 +22,8 @@ program
   .option('--quick', 'Quick review: analyze diff only (default)')
   .option('--deep', 'Deep review: clone repo and explore codebase for cross-file impacts')
   .option('--post', 'Post review to GitHub PR')
-  .action(async (prUrl: string, options: { verbose?: boolean; quick?: boolean; deep?: boolean; post?: boolean }) => {
+  .option('--model <model-id>', 'Claude model to use (e.g., sonnet, opus, haiku, or full model ID)')
+  .action(async (prUrl: string, options: { verbose?: boolean; quick?: boolean; deep?: boolean; post?: boolean; model?: string }) => {
     // 1. Check prerequisites (collect all failures, report at once)
     const failures = checkPrerequisites();
     if (failures.length > 0) {
@@ -85,7 +86,7 @@ program
       let quickFindings;
       try {
         printProgress('Analyzing diff...');
-        const result = await analyzeDiff(prData);
+        const result = await analyzeDiff(prData, options.model);
         printProgressDone();
         quickFindings = result.findings;
       } catch (error: unknown) {
@@ -101,7 +102,7 @@ program
       let deepFindings: typeof quickFindings = [];
       if (cloneSucceeded) {
         printProgress('Exploring codebase...');
-        const deepResult = await analyzeDeep(prData, clonePath);
+        const deepResult = await analyzeDeep(prData, clonePath, options.model);
         printProgressDone();
         deepFindings = deepResult.findings;
         if (deepFindings.length > 0) {
@@ -175,7 +176,7 @@ program
       // 4. Analyze diff with progress
       try {
         printProgress('Analyzing diff...');
-        const result = await analyzeDiff(prData);
+        const result = await analyzeDiff(prData, options.model);
         printProgressDone();
         findings = result.findings;
       } catch (error: unknown) {
