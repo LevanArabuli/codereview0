@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { printPRSummary, printErrors, printVerbose } from '../src/output.js';
+import { printPRSummary, printErrors, printVerbose, printFindings } from '../src/output.js';
 import type { PRData, PrereqFailure } from '../src/types.js';
+import type { ReviewFinding } from '../src/schemas.js';
 
 const mockPR: PRData = {
   number: 42,
@@ -136,5 +137,67 @@ describe('printVerbose', () => {
     printVerbose(mockPR);
     const output = logSpy.mock.calls.map((c) => c[0]).join('\n');
     expect(output).toContain('Raw Diff');
+  });
+});
+
+describe('printFindings', () => {
+  let logSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
+  it('sorts findings globally by severity then confidence', () => {
+    const findings: ReviewFinding[] = [
+      { file: 'b.ts', line: 10, severity: 'suggestion', confidence: 'medium', category: 'quality', description: 'Suggestion B' },
+      { file: 'a.ts', line: 5, severity: 'bug', confidence: 'high', category: 'logic', description: 'Bug A' },
+      { file: 'c.ts', line: 20, severity: 'nitpick', confidence: 'low', category: 'style', description: 'Nitpick C' },
+      { file: 'a.ts', line: 1, severity: 'security', confidence: 'high', category: 'security', description: 'Security A' },
+      { file: 'b.ts', line: 3, severity: 'bug', confidence: 'low', category: 'logic', description: 'Bug B low' },
+    ];
+
+    printFindings(findings);
+
+    const lines = logSpy.mock.calls.map((c) => c[0] as string);
+    // Bug high should come first, bug low second, security third, suggestion fourth, nitpick last
+    expect(lines[0]).toContain('Bug A');
+    expect(lines[1]).toContain('Bug B low');
+    expect(lines[2]).toContain('Security A');
+    expect(lines[3]).toContain('Suggestion B');
+    expect(lines[4]).toContain('Nitpick C');
+  });
+
+  it('shows file:line inline on each finding', () => {
+    const findings: ReviewFinding[] = [
+      { file: 'src/foo.ts', line: 42, severity: 'bug', confidence: 'high', category: 'logic', description: 'Missing null check' },
+    ];
+
+    printFindings(findings);
+
+    const output = logSpy.mock.calls.map((c) => c[0] as string).join('\n');
+    expect(output).toContain('src/foo.ts:42');
+  });
+
+  it('produces no output for empty findings', () => {
+    printFindings([]);
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not mutate the original findings array', () => {
+    const findings: ReviewFinding[] = [
+      { file: 'b.ts', line: 10, severity: 'suggestion', confidence: 'medium', category: 'quality', description: 'Second' },
+      { file: 'a.ts', line: 5, severity: 'bug', confidence: 'high', category: 'logic', description: 'First' },
+    ];
+
+    const originalOrder = [...findings];
+    printFindings(findings);
+
+    // Original array should be unchanged
+    expect(findings[0].description).toBe(originalOrder[0].description);
+    expect(findings[1].description).toBe(originalOrder[1].description);
   });
 });
