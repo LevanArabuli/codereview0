@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { printPRSummary, printErrors, printVerbose, printFindings } from '../src/output.js';
+import { printPRSummary, printErrors, printVerbose, printFindings, printAnalysisSummary, extractHeadline } from '../src/output.js';
 import type { PRData, PrereqFailure } from '../src/types.js';
 import type { ReviewFinding } from '../src/schemas.js';
 
@@ -162,13 +162,13 @@ describe('printFindings', () => {
 
     printFindings(findings);
 
-    const lines = logSpy.mock.calls.map((c) => c[0] as string);
-    // Bug high should come first, bug low second, security third, suggestion fourth, nitpick last
-    expect(lines[0]).toContain('Bug A');
-    expect(lines[1]).toContain('Bug B low');
-    expect(lines[2]).toContain('Security A');
-    expect(lines[3]).toContain('Suggestion B');
-    expect(lines[4]).toContain('Nitpick C');
+    // Join all console.log calls into a single string to verify ordering
+    const output = logSpy.mock.calls.map((c) => c[0] ?? '').join('\n');
+    // Bug high before bug low, bugs before security, security before suggestion, suggestion before nitpick
+    expect(output.indexOf('Bug A')).toBeLessThan(output.indexOf('Bug B low'));
+    expect(output.indexOf('Bug B low')).toBeLessThan(output.indexOf('Security A'));
+    expect(output.indexOf('Security A')).toBeLessThan(output.indexOf('Suggestion B'));
+    expect(output.indexOf('Suggestion B')).toBeLessThan(output.indexOf('Nitpick C'));
   });
 
   it('shows file:line inline on each finding', () => {
@@ -199,5 +199,149 @@ describe('printFindings', () => {
     // Original array should be unchanged
     expect(findings[0].description).toBe(originalOrder[0].description);
     expect(findings[1].description).toBe(originalOrder[1].description);
+  });
+
+  it('separates findings with blank lines', () => {
+    const findings: ReviewFinding[] = [
+      { file: 'a.ts', line: 1, severity: 'bug', confidence: 'high', category: 'logic', description: 'First bug' },
+      { file: 'b.ts', line: 2, severity: 'bug', confidence: 'high', category: 'logic', description: 'Second bug' },
+    ];
+
+    printFindings(findings);
+
+    const calls = logSpy.mock.calls;
+    // Should have blank line separator (console.log() with no args) between findings
+    const blankLineCalls = calls.filter((c) => c.length === 0 || c[0] === undefined);
+    expect(blankLineCalls.length).toBeGreaterThanOrEqual(1);
+
+    // Last call should NOT be a blank line (no trailing blank line)
+    const lastCall = calls[calls.length - 1];
+    expect(lastCall.length).toBeGreaterThan(0);
+    expect(lastCall[0]).toBeDefined();
+  });
+
+  it('renders nitpick findings in dim text with circle icon', () => {
+    const findings: ReviewFinding[] = [
+      { file: 'src/config.ts', line: 3, severity: 'nitpick', confidence: 'low', category: 'style', description: 'Unused import' },
+    ];
+
+    printFindings(findings);
+
+    const output = logSpy.mock.calls.map((c) => c[0] as string).join('\n');
+    expect(output).toContain('Unused import');
+    expect(output).toContain('src/config.ts:3');
+    // Should contain the circle icon character
+    expect(output).toContain('\u25CB');
+  });
+
+  it('renders multi-line blocks with headline and detail', () => {
+    const findings: ReviewFinding[] = [
+      { file: 'src/auth.ts', line: 42, severity: 'bug', confidence: 'high', category: 'logic', description: 'Missing null check. The user object may be null when the session expires.' },
+    ];
+
+    printFindings(findings);
+
+    const output = logSpy.mock.calls.map((c) => c[0] as string).join('\n');
+    // Headline on first line
+    expect(output).toContain('Missing null check.');
+    // Detail on subsequent line
+    expect(output).toContain('The user object may be null when the session expires.');
+  });
+});
+
+describe('extractHeadline', () => {
+  it('splits on first sentence-ending punctuation followed by uppercase', () => {
+    const result = extractHeadline('Missing null check. The user object may be null.');
+    expect(result.headline).toBe('Missing null check.');
+    expect(result.detail).toBe('The user object may be null.');
+  });
+
+  it('returns full description as headline when no split point', () => {
+    const result = extractHeadline('simple description without split');
+    expect(result.headline).toBe('simple description without split');
+    expect(result.detail).toBe('');
+  });
+
+  it('splits on exclamation mark', () => {
+    const result = extractHeadline('Critical error! Check the logs for details.');
+    expect(result.headline).toBe('Critical error!');
+    expect(result.detail).toBe('Check the logs for details.');
+  });
+
+  it('splits on question mark', () => {
+    const result = extractHeadline('Is this intentional? The variable is never used.');
+    expect(result.headline).toBe('Is this intentional?');
+    expect(result.detail).toBe('The variable is never used.');
+  });
+});
+
+describe('printAnalysisSummary', () => {
+  let logSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
+  it('shows severity counts with icons', () => {
+    const findings: ReviewFinding[] = [
+      { file: 'a.ts', line: 1, severity: 'bug', confidence: 'high', category: 'logic', description: 'Bug 1' },
+      { file: 'a.ts', line: 2, severity: 'bug', confidence: 'high', category: 'logic', description: 'Bug 2' },
+      { file: 'b.ts', line: 1, severity: 'security', confidence: 'high', category: 'security', description: 'Sec 1' },
+      { file: 'c.ts', line: 1, severity: 'suggestion', confidence: 'medium', category: 'quality', description: 'Sug 1' },
+      { file: 'c.ts', line: 2, severity: 'suggestion', confidence: 'medium', category: 'quality', description: 'Sug 2' },
+      { file: 'c.ts', line: 3, severity: 'suggestion', confidence: 'low', category: 'quality', description: 'Sug 3' },
+      { file: 'd.ts', line: 1, severity: 'nitpick', confidence: 'low', category: 'style', description: 'Nit 1' },
+    ];
+
+    printAnalysisSummary(findings);
+
+    const output = logSpy.mock.calls.map((c) => c[0] as string).join('\n');
+    expect(output).toContain('2 bugs');
+    expect(output).toContain('1 security');
+    expect(output).toContain('3 suggestions');
+    expect(output).toContain('1 nitpick');
+    // Should contain severity icons
+    expect(output).toContain('\u2716'); // bug icon
+    expect(output).toContain('\u26A0'); // security icon
+    expect(output).toContain('\u25C6'); // suggestion icon
+    expect(output).toContain('\u25CB'); // nitpick icon
+  });
+
+  it('omits zero counts', () => {
+    const findings: ReviewFinding[] = [
+      { file: 'a.ts', line: 1, severity: 'bug', confidence: 'high', category: 'logic', description: 'Bug 1' },
+      { file: 'a.ts', line: 2, severity: 'bug', confidence: 'high', category: 'logic', description: 'Bug 2' },
+    ];
+
+    printAnalysisSummary(findings);
+
+    const output = logSpy.mock.calls.map((c) => c[0] as string).join('\n');
+    expect(output).toContain('2 bugs');
+    expect(output).not.toContain('security');
+    expect(output).not.toContain('suggestion');
+    expect(output).not.toContain('nitpick');
+  });
+
+  it('prints No findings for empty array', () => {
+    printAnalysisSummary([]);
+
+    const output = logSpy.mock.calls.map((c) => c[0] as string).join('\n');
+    expect(output).toContain('No findings');
+  });
+
+  it('uses singular form for count of 1', () => {
+    const findings: ReviewFinding[] = [
+      { file: 'a.ts', line: 1, severity: 'bug', confidence: 'high', category: 'logic', description: 'Bug 1' },
+    ];
+
+    printAnalysisSummary(findings);
+
+    const output = logSpy.mock.calls.map((c) => c[0] as string).join('\n');
+    expect(output).toContain('1 bug');
+    expect(output).not.toContain('1 bugs');
   });
 });

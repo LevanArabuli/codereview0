@@ -126,7 +126,7 @@ program
 
           const diffHunks = parseDiffHunks(prData.diff);
           const { inline, offDiff } = partitionFindings(findings, diffHunks);
-          const reviewBody = buildReviewBody(findings, offDiff);
+          const reviewBody = buildReviewBody(offDiff);
           const comments = inline.map((f) => ({
             path: f.file,
             line: f.line,
@@ -197,7 +197,7 @@ program
 
           const diffHunks = parseDiffHunks(prData.diff);
           const { inline, offDiff } = partitionFindings(findings, diffHunks);
-          const reviewBody = buildReviewBody(findings, offDiff);
+          const reviewBody = buildReviewBody(offDiff);
           const comments = inline.map((f) => ({
             path: f.file,
             line: f.line,
