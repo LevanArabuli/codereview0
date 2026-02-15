@@ -26,52 +26,23 @@ export function partitionFindings(
   return { inline, offDiff };
 }
 
-/** Severity display order: bug, security, suggestion, nitpick */
-const SEVERITY_ORDER = ['bug', 'security', 'suggestion', 'nitpick'] as const;
-
-/** Pluralization rules per severity */
-function pluralizeSeverity(severity: string, count: number): string {
-  if (severity === 'bug') return count === 1 ? '1 bug' : `${count} bugs`;
-  if (severity === 'security') return `${count} security`;
-  if (severity === 'suggestion') return count === 1 ? '1 suggestion' : `${count} suggestions`;
-  if (severity === 'nitpick') return count === 1 ? '1 nitpick' : `${count} nitpicks`;
-  return `${count} ${severity}`;
-}
-
 /**
- * Build the review body string with summary line and optional off-diff findings section.
+ * Build the review body string.
  *
- * @param allFindings - All findings (for summary counts)
- * @param offDiffFindings - Findings outside the diff (for off-diff section)
+ * Returns empty string when all findings are inline (no off-diff findings).
+ * When off-diff findings exist, lists them with capitalized severity.
+ *
+ * @param offDiffFindings - Findings outside the diff
  */
-export function buildReviewBody(
-  allFindings: ReviewFinding[],
-  offDiffFindings: ReviewFinding[],
-): string {
-  // Count by severity
-  const counts: Record<string, number> = {};
-  for (const f of allFindings) {
-    counts[f.severity] = (counts[f.severity] ?? 0) + 1;
+export function buildReviewBody(offDiffFindings: ReviewFinding[]): string {
+  if (offDiffFindings.length === 0) {
+    return '';
   }
 
-  // Build severity parts in order
-  const parts: string[] = [];
-  for (const severity of SEVERITY_ORDER) {
-    const count = counts[severity];
-    if (count && count > 0) {
-      parts.push(pluralizeSeverity(severity, count));
-    }
-  }
-
-  const total = allFindings.length;
-  let body = `Found ${total} issue${total === 1 ? '' : 's'}: ${parts.join(', ')}`;
-
-  // Off-diff section
-  if (offDiffFindings.length > 0) {
-    body += '\n\n---\n\n**Findings outside the diff** (cannot be posted as inline comments):\n';
-    for (const f of offDiffFindings) {
-      body += `\n- **${f.severity}** \`[${f.confidence}]\` \`${f.file}:${f.line}\` -- ${f.description}`;
-    }
+  let body = '**Findings outside the diff** (cannot be posted as inline comments):\n';
+  for (const f of offDiffFindings) {
+    const severity = f.severity.charAt(0).toUpperCase() + f.severity.slice(1);
+    body += `\n- **${severity}** \`[${f.confidence}]\` \`${f.file}:${f.line}\` -- ${f.description}`;
   }
 
   return body;

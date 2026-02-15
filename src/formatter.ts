@@ -1,15 +1,28 @@
 import type { ReviewFinding } from './schemas.js';
 
 /**
+ * Extract the first 1-2 sentences from a description.
+ * Returns the full description if it has 2 or fewer sentences.
+ */
+function conciseDescription(description: string): string {
+  const sentences = description.match(/[^.!?]*[.!?]+/g);
+  if (!sentences || sentences.length <= 2) return description.trim();
+  return sentences.slice(0, 2).join('').trim();
+}
+
+/**
  * Format a finding as a GitHub inline comment body.
  *
  * Structure:
- *   **{severity}** `[{confidence}]` {description}
+ *   **{Severity}** `[{confidence}]`
+ *   (blank line)
+ *   1-2 sentence concise description
  *   (optional related locations)
  *   (optional suggestion block)
  */
 export function formatInlineComment(finding: ReviewFinding): string {
-  let body = `**${finding.severity}** \`[${finding.confidence}]\` ${finding.description}`;
+  const severity = finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1);
+  let body = `**${severity}** \`[${finding.confidence}]\`\n\n${conciseDescription(finding.description)}`;
 
   // Append related locations if present
   if (finding.relatedLocations && finding.relatedLocations.length > 0) {
