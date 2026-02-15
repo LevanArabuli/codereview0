@@ -78,8 +78,9 @@ export function printProgressDone(): void {
 }
 
 /**
- * Print a summary of findings counts by severity.
- * Only includes severities with count > 0.
+ * Print a summary of findings counts by severity with color-coded icons.
+ * Only includes severities with count > 0. Zero counts are omitted.
+ * Format: "icon count label" joined by dim dot separator.
  */
 export function printAnalysisSummary(findings: ReviewFinding[]): void {
   const counts: Record<string, number> = {};
@@ -87,7 +88,6 @@ export function printAnalysisSummary(findings: ReviewFinding[]): void {
     counts[f.severity] = (counts[f.severity] ?? 0) + 1;
   }
 
-  const total = findings.length;
   const parts: string[] = [];
 
   const severities = ['bug', 'security', 'suggestion', 'nitpick'] as const;
@@ -95,19 +95,22 @@ export function printAnalysisSummary(findings: ReviewFinding[]): void {
     const count = counts[severity];
     if (count && count > 0) {
       if (severity === 'bug') {
-        parts.push(`${count} bug${count === 1 ? '' : 's'}`);
+        parts.push(pc.red(`\u2716 ${count} bug${count === 1 ? '' : 's'}`));
       } else if (severity === 'security') {
-        parts.push(`${count} security`);
+        parts.push(pc.yellow(`\u26A0 ${count} security`));
       } else if (severity === 'suggestion') {
-        parts.push(`${count} suggestion${count === 1 ? '' : 's'}`);
+        parts.push(pc.blue(`\u25C6 ${count} suggestion${count === 1 ? '' : 's'}`));
       } else if (severity === 'nitpick') {
-        parts.push(`${count} nitpick${count === 1 ? '' : 's'}`);
+        parts.push(pc.dim(`\u25CB ${count} nitpick${count === 1 ? '' : 's'}`));
       }
     }
   }
 
-  const summary = parts.length > 0 ? `: ${parts.join(', ')}` : '';
-  console.log(`Found ${total} finding${total === 1 ? '' : 's'}${summary}`);
+  if (parts.length === 0) {
+    console.log(pc.dim('No findings'));
+  } else {
+    console.log(parts.join(pc.dim(' \u00B7 ')));
+  }
 }
 
 /** Severity sort order: lower index = higher priority */
@@ -141,10 +144,23 @@ export function printExplorationSummary(filesAnalyzed: number): void {
 }
 
 /**
+ * Split a description into headline (first sentence) and detail (remainder).
+ * Splits on the first sentence-ending punctuation (. ! ?) followed by a space and uppercase letter.
+ * If no split point found, the entire description becomes the headline with no detail.
+ */
+export function extractHeadline(description: string): { headline: string; detail: string } {
+  const match = description.match(/^(.+?[.!?])\s+([A-Z].+)$/s);
+  if (match) {
+    return { headline: match[1], detail: match[2] };
+  }
+  return { headline: description, detail: '' };
+}
+
+/**
  * Print findings sorted globally by severity (bug > security > suggestion > nitpick),
  * then by confidence (high > medium > low) within same severity.
- * Each finding shows file:line inline. No file grouping or section headers.
- * Nitpick findings are rendered entirely in dim text.
+ * Each finding is rendered as a multi-line block: headline on line 1, description indented below.
+ * Findings are separated by blank lines. Nitpick findings are rendered entirely in dim text.
  * Empty findings array produces no output.
  */
 export function printFindings(findings: ReviewFinding[]): void {
@@ -164,17 +180,29 @@ export function printFindings(findings: ReviewFinding[]): void {
     return a.line - b.line;
   });
 
-  // Print flat list with file:line inline (no file headers, no section headers)
-  for (const f of sorted) {
-    const icon = SEVERITY_ICONS[f.severity] ?? f.severity;
-    const location = pc.dim(`${f.file}:${f.line}`);
-    const confidence = pc.dim(`[${f.confidence}]`);
+  // Print multi-line blocks with blank line separators
+  for (let i = 0; i < sorted.length; i++) {
+    const f = sorted[i];
+    const location = `${f.file}:${f.line}`;
+    const { headline, detail } = extractHeadline(f.description);
 
     if (f.severity === 'nitpick') {
-      // Entire nitpick line rendered in dim
-      console.log(pc.dim(`  \u25CB nitpick ${f.file}:${f.line} [${f.confidence}] ${f.description}`));
+      // Entire nitpick block rendered in dim
+      console.log(pc.dim(`  \u25CB nitpick ${location} ${headline}`));
+      if (detail) {
+        console.log(pc.dim(`    ${detail}`));
+      }
     } else {
-      console.log(`  ${icon} ${location} ${confidence} ${f.description}`);
+      const icon = SEVERITY_ICONS[f.severity] ?? f.severity;
+      console.log(`  ${icon} ${pc.dim(location)} ${headline}`);
+      if (detail) {
+        console.log(`    ${detail}`);
+      }
+    }
+
+    // Blank line between findings, but not after the last one
+    if (i < sorted.length - 1) {
+      console.log();
     }
   }
 }
