@@ -1,10 +1,10 @@
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import pc from 'picocolors';
 import { parsePRUrl } from './url-parser.js';
 import { checkPrerequisites } from './prerequisites.js';
 import { createOctokit, fetchPRData, postReview } from './github.js';
-import { printPRSummary, printErrors, printDebug, printModel, formatDuration, estimateTokens, printProgress, printProgressDone, printAnalysisSummary, printFindings, printExplorationSummary } from './output.js';
-import { buildPrompt, buildDeepPrompt } from './prompt.js';
+import { printPRSummary, printErrors, printDebug, printModel, printMode, formatDuration, estimateTokens, printProgress, printProgressDone, printAnalysisSummary, printFindings, printExplorationSummary } from './output.js';
+import { buildPrompt, buildDeepPrompt, type ReviewMode } from './prompt.js';
 import { analyzeDiff, analyzeDeep } from './analyzer.js';
 import { cloneRepo, getClonePath, promptCleanup } from './cloner.js';
 import { parseDiffHunks } from './diff-parser.js';
@@ -24,7 +24,12 @@ program
   .option('--deep', 'Deep review: clone repo and explore codebase for cross-file impacts')
   .option('--post', 'Post review to GitHub PR')
   .option('--model <model-id>', 'Claude model to use (e.g., sonnet, opus, haiku, or full model ID)')
-  .action(async (prUrl: string, options: { verbose?: boolean; quick?: boolean; deep?: boolean; post?: boolean; model?: string }) => {
+  .addOption(
+    new Option('--mode <mode>', 'Review mode: strict, detailed, lenient, balanced')
+      .choices(['strict', 'detailed', 'lenient', 'balanced'])
+      .default('balanced')
+  )
+  .action(async (prUrl: string, options: { verbose?: boolean; quick?: boolean; deep?: boolean; post?: boolean; model?: string; mode: ReviewMode }) => {
     // 1. Check prerequisites (collect all failures, report at once)
     const failures = checkPrerequisites();
     if (failures.length > 0) {
@@ -63,6 +68,10 @@ program
 
     // Print PR summary so user sees what they're reviewing while waiting for analysis
     printPRSummary(prData);
+    printMode(options.mode);
+    if (options.verbose) {
+      printDebug(`Mode: ${options.mode}`);
+    }
 
     let findings;
 
@@ -93,11 +102,11 @@ program
       // 4b. Quick analysis (always runs)
       let quickFindings;
       let diffModel = '';
-      const diffPrompt = buildPrompt(prData);
+      const diffPrompt = buildPrompt(prData, options.mode);
       const analyzeStart = performance.now();
       try {
         printProgress('Analyzing diff...');
-        const result = await analyzeDiff(prData, options.model);
+        const result = await analyzeDiff(prData, options.model, options.mode);
         printProgressDone();
         quickFindings = result.findings;
         diffModel = result.model;
@@ -121,10 +130,10 @@ program
       // 4c. Deep exploration (only if clone succeeded)
       let deepFindings: typeof quickFindings = [];
       if (cloneSucceeded) {
-        const deepPrompt = buildDeepPrompt(prData);
+        const deepPrompt = buildDeepPrompt(prData, options.mode);
         const exploreStart = performance.now();
         printProgress('Exploring codebase...');
-        const deepResult = await analyzeDeep(prData, clonePath, options.model);
+        const deepResult = await analyzeDeep(prData, clonePath, options.model, options.mode);
         printProgressDone();
         deepFindings = deepResult.findings;
         const exploreDuration = performance.now() - exploreStart;
@@ -208,11 +217,11 @@ program
       // Quick mode (default): analyze diff only
 
       // 4. Analyze diff with progress and timing
-      const quickPrompt = buildPrompt(prData);
+      const quickPrompt = buildPrompt(prData, options.mode);
       const analyzeStart = performance.now();
       try {
         printProgress('Analyzing diff...');
-        const result = await analyzeDiff(prData, options.model);
+        const result = await analyzeDiff(prData, options.model, options.mode);
         printProgressDone();
         findings = result.findings;
 
