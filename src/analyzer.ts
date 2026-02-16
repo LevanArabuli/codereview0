@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { ReviewResultSchema } from "./schemas.js";
 import { buildPrompt, buildDeepPrompt } from "./prompt.js";
 import type { PRData } from "./types.js";
-import type { ReviewResult } from "./schemas.js";
+import type { ReviewFinding } from "./schemas.js";
 
 const execFile = promisify(execFileCb);
 
@@ -34,6 +34,26 @@ interface ClaudeResponse {
   num_turns: number;
   result: string;
   session_id: string;
+  modelUsage?: Record<string, unknown>;
+}
+
+/** Structured analysis result with findings and model identification */
+export interface AnalysisResult {
+  findings: ReviewFinding[];
+  model: string;
+}
+
+/**
+ * Extract the model ID from the Claude CLI response wrapper.
+ * Uses the modelUsage field keys (first key is the model ID),
+ * with fallback to the CLI-provided model name or 'unknown'.
+ */
+function extractModelId(wrapper: ClaudeResponse, fallbackModel?: string): string {
+  if (wrapper.modelUsage) {
+    const models = Object.keys(wrapper.modelUsage);
+    if (models.length > 0) return models[0];
+  }
+  return fallbackModel ?? 'unknown';
 }
 
 /**
@@ -43,7 +63,7 @@ interface ClaudeResponse {
  * Zod-derived JSON Schema constraint. Implements double JSON parsing
  * (wrapper + result), Zod validation, retry-once logic, and 5-minute timeout.
  */
-export async function analyzeDiff(prData: PRData, model?: string): Promise<ReviewResult> {
+export async function analyzeDiff(prData: PRData, model?: string): Promise<AnalysisResult> {
   const prompt = buildPrompt(prData);
 
   let lastError: Error | undefined;
@@ -102,7 +122,7 @@ export async function analyzeDiff(prData: PRData, model?: string): Promise<Revie
         throw new Error(`Response validation failed: ${parsed.error.message}`);
       }
 
-      return parsed.data;
+      return { findings: parsed.data.findings, model: extractModelId(wrapper, model) };
     } catch (error: unknown) {
       // Check for timeout (execFile sets killed=true when process is killed due to timeout)
       if (
@@ -142,7 +162,7 @@ export async function analyzeDeep(
   prData: PRData,
   clonePath: string,
   model?: string,
-): Promise<ReviewResult> {
+): Promise<AnalysisResult> {
   const prompt = buildDeepPrompt(prData);
 
   try {
@@ -198,7 +218,7 @@ export async function analyzeDeep(
       throw new Error(`Response validation failed: ${parsed.error.message}`);
     }
 
-    return parsed.data;
+    return { findings: parsed.data.findings, model: extractModelId(wrapper, model) };
   } catch (error: unknown) {
     // Check for timeout (execFile sets killed=true when process is killed due to timeout)
     if (
@@ -209,7 +229,7 @@ export async function analyzeDeep(
       console.error(
         "Deep exploration timed out -- proceeding with quick analysis only",
       );
-      return { findings: [] };
+      return { findings: [], model: model ?? 'unknown' };
     }
 
     // All other errors: degrade gracefully to empty findings
@@ -217,6 +237,6 @@ export async function analyzeDeep(
     console.error(
       `Deep exploration failed: ${message} -- proceeding with quick analysis only`,
     );
-    return { findings: [] };
+    return { findings: [], model: model ?? 'unknown' };
   }
 }
