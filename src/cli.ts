@@ -3,7 +3,8 @@ import pc from 'picocolors';
 import { parsePRUrl } from './url-parser.js';
 import { checkPrerequisites } from './prerequisites.js';
 import { createOctokit, fetchPRData, postReview } from './github.js';
-import { printPRSummary, printErrors, printVerbose, printProgress, printProgressDone, printAnalysisSummary, printFindings, printExplorationSummary } from './output.js';
+import { printPRSummary, printErrors, printDebug, printModel, formatDuration, estimateTokens, printProgress, printProgressDone, printAnalysisSummary, printFindings, printExplorationSummary } from './output.js';
+import { buildPrompt, buildDeepPrompt } from './prompt.js';
 import { analyzeDiff, analyzeDeep } from './analyzer.js';
 import { cloneRepo, getClonePath, promptCleanup } from './cloner.js';
 import { parseDiffHunks } from './diff-parser.js';
@@ -18,7 +19,7 @@ program
   .description('AI-powered GitHub PR code review')
   .version('0.1.0')
   .argument('<pr-url>', 'GitHub Pull Request URL')
-  .option('-v, --verbose', 'Show debug info including raw diff')
+  .option('--verbose', 'Show debug info: model, timing, prompt size, finding counts')
   .option('--quick', 'Quick review: analyze diff only (default)')
   .option('--deep', 'Deep review: clone repo and explore codebase for cross-file impacts')
   .option('--post', 'Post review to GitHub PR')
@@ -39,9 +40,10 @@ program
       process.exit(EXIT_INVALID_URL);
     }
 
-    // 3. Fetch PR data with progress
+    // 3. Fetch PR data with progress and timing
     let prData;
     const octokit = createOctokit();
+    const fetchStart = performance.now();
     try {
       printProgress('Fetching PR data...');
       prData = await fetchPRData(octokit, parsed.owner, parsed.repo, parsed.prNumber);
@@ -53,6 +55,10 @@ program
         console.error(pc.dim('  ' + error.message));
       }
       process.exit(EXIT_API_ERROR);
+    }
+    const fetchDuration = performance.now() - fetchStart;
+    if (options.verbose) {
+      printDebug(`Fetch: ${formatDuration(fetchDuration)}`);
     }
 
     // Print PR summary so user sees what they're reviewing while waiting for analysis
@@ -66,6 +72,7 @@ program
       // 4a. Clone repository
       let cloneSucceeded = false;
       const clonePath = getClonePath(prData.headRepoName);
+      const cloneStart = performance.now();
       try {
         printProgress('Cloning repository...');
         await cloneRepo(prData.headRepoOwner, prData.headRepoName, prData.headBranch, clonePath);
@@ -78,14 +85,22 @@ program
           console.error(pc.dim('  ' + error.message));
         }
       }
+      const cloneDuration = performance.now() - cloneStart;
+      if (options.verbose) {
+        printDebug(`Clone: ${formatDuration(cloneDuration)}`);
+      }
 
       // 4b. Quick analysis (always runs)
       let quickFindings;
+      let diffModel = '';
+      const diffPrompt = buildPrompt(prData);
+      const analyzeStart = performance.now();
       try {
         printProgress('Analyzing diff...');
         const result = await analyzeDiff(prData, options.model);
         printProgressDone();
         quickFindings = result.findings;
+        diffModel = result.model;
       } catch (error: unknown) {
         console.log(); // newline after progress message
         console.error(pc.red('Analysis failed'));
@@ -94,16 +109,30 @@ program
         }
         process.exit(EXIT_ANALYSIS_ERROR);
       }
+      const analyzeDuration = performance.now() - analyzeStart;
+
+      // Model line always visible after first analysis
+      printModel(diffModel);
+
+      if (options.verbose) {
+        printDebug(`Analyze (diff): ${formatDuration(analyzeDuration)}, prompt ${estimateTokens(diffPrompt.length)}`);
+      }
 
       // 4c. Deep exploration (only if clone succeeded)
       let deepFindings: typeof quickFindings = [];
       if (cloneSucceeded) {
+        const deepPrompt = buildDeepPrompt(prData);
+        const exploreStart = performance.now();
         printProgress('Exploring codebase...');
         const deepResult = await analyzeDeep(prData, clonePath, options.model);
         printProgressDone();
         deepFindings = deepResult.findings;
+        const exploreDuration = performance.now() - exploreStart;
         if (deepFindings.length > 0) {
           printExplorationSummary(deepFindings.length);
+        }
+        if (options.verbose) {
+          printDebug(`Analyze (explore): ${formatDuration(exploreDuration)}, prompt ${estimateTokens(deepPrompt.length)}`);
         }
       }
 
@@ -114,14 +143,22 @@ program
       printAnalysisSummary(findings);
       printFindings(findings);
 
-      // 6. Verbose output
+      // 6. Finding counts debug
       if (options.verbose) {
-        printVerbose(prData);
+        if (options.post) {
+          const diffHunks = parseDiffHunks(prData.diff);
+          const { inline, offDiff } = partitionFindings(findings, diffHunks);
+          const posted = inline.length + (offDiff.length > 0 ? 1 : 0);
+          printDebug(`Findings: ${findings.length} raw, ${posted} posted`);
+        } else {
+          printDebug(`Findings: ${findings.length} raw`);
+        }
       }
 
       // 7. Post review to GitHub (only with --post and non-zero findings)
       if (options.post && findings.length > 0) {
         try {
+          const postStart = performance.now();
           printProgress('Posting review to GitHub...');
 
           const diffHunks = parseDiffHunks(prData.diff);
@@ -146,6 +183,10 @@ program
 
           printProgressDone();
           console.log(pc.dim('Review URL: ') + reviewUrl);
+          const postDuration = performance.now() - postStart;
+          if (options.verbose) {
+            printDebug(`Post: ${formatDuration(postDuration)}`);
+          }
         } catch (error: unknown) {
           console.log(); // newline after progress message
           console.error(pc.yellow('\u26A0 Failed to post review to GitHub'));
@@ -166,12 +207,23 @@ program
     } else {
       // Quick mode (default): analyze diff only
 
-      // 4. Analyze diff with progress
+      // 4. Analyze diff with progress and timing
+      const quickPrompt = buildPrompt(prData);
+      const analyzeStart = performance.now();
       try {
         printProgress('Analyzing diff...');
         const result = await analyzeDiff(prData, options.model);
         printProgressDone();
         findings = result.findings;
+
+        const analyzeDuration = performance.now() - analyzeStart;
+
+        // Model line always visible
+        printModel(result.model);
+
+        if (options.verbose) {
+          printDebug(`Analyze: ${formatDuration(analyzeDuration)}, prompt ${estimateTokens(quickPrompt.length)}`);
+        }
       } catch (error: unknown) {
         console.log(); // newline after progress message
         console.error(pc.red('Analysis failed'));
@@ -185,14 +237,22 @@ program
       printAnalysisSummary(findings);
       printFindings(findings);
 
-      // 6. Verbose output
+      // 6. Finding counts debug
       if (options.verbose) {
-        printVerbose(prData);
+        if (options.post) {
+          const diffHunks = parseDiffHunks(prData.diff);
+          const { inline, offDiff } = partitionFindings(findings, diffHunks);
+          const posted = inline.length + (offDiff.length > 0 ? 1 : 0);
+          printDebug(`Findings: ${findings.length} raw, ${posted} posted`);
+        } else {
+          printDebug(`Findings: ${findings.length} raw`);
+        }
       }
 
       // 7. Post review to GitHub (only with --post and non-zero findings)
       if (options.post && findings.length > 0) {
         try {
+          const postStart = performance.now();
           printProgress('Posting review to GitHub...');
 
           const diffHunks = parseDiffHunks(prData.diff);
@@ -217,6 +277,10 @@ program
 
           printProgressDone();
           console.log(pc.dim('Review URL: ') + reviewUrl);
+          const postDuration = performance.now() - postStart;
+          if (options.verbose) {
+            printDebug(`Post: ${formatDuration(postDuration)}`);
+          }
         } catch (error: unknown) {
           console.log(); // newline after progress message
           console.error(pc.yellow('\u26A0 Failed to post review to GitHub'));
