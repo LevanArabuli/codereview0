@@ -11,6 +11,7 @@ import { parseDiffHunks } from './diff-parser.js';
 import { partitionFindings, buildReviewBody } from './review-builder.js';
 import { formatInlineComment } from './formatter.js';
 import { EXIT_PREREQ, EXIT_INVALID_URL, EXIT_API_ERROR, EXIT_ANALYSIS_ERROR } from './errors.js';
+import { generateHtmlReport, openInBrowser } from './html-report.js';
 
 const program = new Command();
 
@@ -23,13 +24,14 @@ program
   .option('--quick', 'Quick review: analyze diff only (default)')
   .option('--deep', 'Deep review: clone repo and explore codebase for cross-file impacts')
   .option('--post', 'Post review to GitHub PR')
+  .option('--html', 'Generate HTML report and open in browser')
   .option('--model <model-id>', 'Claude model to use (e.g., sonnet, opus, haiku, or full model ID)')
   .addOption(
     new Option('--mode <mode>', 'Review mode: strict, detailed, lenient, balanced')
       .choices(['strict', 'detailed', 'lenient', 'balanced'])
       .default('balanced')
   )
-  .action(async (prUrl: string, options: { verbose?: boolean; quick?: boolean; deep?: boolean; post?: boolean; model?: string; mode: ReviewMode }) => {
+  .action(async (prUrl: string, options: { verbose?: boolean; quick?: boolean; deep?: boolean; post?: boolean; html?: boolean; model?: string; mode: ReviewMode }) => {
     // 1. Check prerequisites (collect all failures, report at once)
     const failures = checkPrerequisites();
     if (failures.length > 0) {
@@ -152,6 +154,12 @@ program
       printAnalysisSummary(findings);
       printFindings(findings);
 
+      // Generate HTML report (if requested)
+      if (options.html) {
+        const reportFile = generateHtmlReport(prData, findings, parsed);
+        openInBrowser(reportFile);
+      }
+
       // 6. Finding counts debug
       if (options.verbose) {
         if (options.post) {
@@ -245,6 +253,12 @@ program
       // 5. Terminal output (always shown)
       printAnalysisSummary(findings);
       printFindings(findings);
+
+      // Generate HTML report (if requested)
+      if (options.html) {
+        const reportFile = generateHtmlReport(prData, findings, parsed);
+        openInBrowser(reportFile);
+      }
 
       // 6. Finding counts debug
       if (options.verbose) {
