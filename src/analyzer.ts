@@ -1,7 +1,7 @@
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import { ReviewResultSchema } from "./schemas.js";
-import { buildPrompt, buildDeepPrompt } from "./prompt.js";
+import { buildPrompt, buildDeepPrompt, type ReviewMode } from "./prompt.js";
 import type { PRData } from "./types.js";
 import type { ReviewFinding } from "./schemas.js";
 
@@ -63,8 +63,8 @@ function extractModelId(wrapper: ClaudeResponse, fallbackModel?: string): string
  * Zod-derived JSON Schema constraint. Implements double JSON parsing
  * (wrapper + result), Zod validation, retry-once logic, and 5-minute timeout.
  */
-export async function analyzeDiff(prData: PRData, model?: string): Promise<AnalysisResult> {
-  const prompt = buildPrompt(prData);
+export async function analyzeDiff(prData: PRData, model?: string, mode?: ReviewMode): Promise<AnalysisResult> {
+  const prompt = buildPrompt(prData, mode);
 
   let lastError: Error | undefined;
 
@@ -162,8 +162,9 @@ export async function analyzeDeep(
   prData: PRData,
   clonePath: string,
   model?: string,
+  mode?: ReviewMode,
 ): Promise<AnalysisResult> {
-  const prompt = buildDeepPrompt(prData);
+  const prompt = buildDeepPrompt(prData, mode);
 
   try {
     const args = [

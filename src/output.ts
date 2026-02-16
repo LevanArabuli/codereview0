@@ -72,6 +72,14 @@ export function printModel(modelId: string): void {
 }
 
 /**
+ * Print the review mode as a dimmed header line.
+ * Always visible (not verbose-only).
+ */
+export function printMode(mode: string): void {
+  console.log(pc.dim(`Mode: ${mode}`));
+}
+
+/**
  * Format milliseconds as human-readable duration.
  * Under 60s: "1.2s", over 60s: "1m 12s"
  */
