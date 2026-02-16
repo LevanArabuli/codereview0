@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { printPRSummary, printErrors, printDebug, printModel, formatDuration, estimateTokens, printFindings, printAnalysisSummary, extractHeadline } from '../src/output.js';
+import { printPRSummary, printErrors, printDebug, printModel, printMode, formatDuration, estimateTokens, printFindings, printAnalysisSummary, extractHeadline } from '../src/output.js';
 import type { PRData, PrereqFailure } from '../src/types.js';
 import type { ReviewFinding } from '../src/schemas.js';
 
@@ -154,6 +154,40 @@ describe('printModel', () => {
   it('outputs a single console.log call', () => {
     printModel('claude-sonnet-4-20250514');
     expect(logSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('printMode', () => {
+  let logSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
+  it('prints mode name with Mode: prefix', () => {
+    printMode('balanced');
+    const output = logSpy.mock.calls.map((c) => c[0]).join('\n');
+    expect(output).toContain('Mode:');
+    expect(output).toContain('balanced');
+  });
+
+  it('outputs a single console.log call', () => {
+    printMode('strict');
+    expect(logSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('works with all mode values', () => {
+    const modes = ['strict', 'detailed', 'lenient', 'balanced'];
+    for (const mode of modes) {
+      logSpy.mockClear();
+      printMode(mode);
+      const output = logSpy.mock.calls.map((c) => c[0]).join('\n');
+      expect(output).toContain(mode);
+    }
   });
 });
 
