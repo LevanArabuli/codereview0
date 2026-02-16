@@ -45,8 +45,7 @@ export function parseDetailedDiff(rawDiff: string): DiffFile[] {
   let oldLineNum = 0;
   let newLineNum = 0;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  for (const line of lines) {
 
     // File boundary: diff --git a/... b/...
     const fileMatch = line.match(FILE_HEADER_RE);
