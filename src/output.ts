@@ -42,27 +42,6 @@ export function printErrors(failures: PrereqFailure[]): void {
 }
 
 /**
- * Print verbose output including color-coded raw diff content.
- */
-export function printVerbose(pr: PRData): void {
-  console.log(pc.bold('Raw Diff:'));
-  for (const line of pr.diff.split('\n')) {
-    if (line.startsWith('+') && !line.startsWith('+++')) {
-      console.log(pc.green(line));
-    } else if (line.startsWith('-') && !line.startsWith('---')) {
-      console.log(pc.red(line));
-    } else if (line.startsWith('@@')) {
-      console.log(pc.cyan(line));
-    } else if (line.startsWith('diff ') || line.startsWith('index ')) {
-      console.log(pc.bold(line));
-    } else {
-      console.log(line);
-    }
-  }
-  console.log(pc.dim(`(${pr.diff.length} characters)`));
-}
-
-/**
  * Print a progress message without a trailing newline.
  * Used for "Fetching PR data..." where " done" is appended on the same line.
  */
@@ -75,6 +54,46 @@ export function printProgress(message: string): void {
  */
 export function printProgressDone(): void {
   console.log(pc.green(' done'));
+}
+
+/**
+ * Print a [debug] line in dimmed text. Only call when --verbose is active.
+ */
+export function printDebug(message: string): void {
+  console.log(pc.dim(`[debug] ${message}`));
+}
+
+/**
+ * Print the model name as a dimmed header line.
+ * Always visible (not verbose-only).
+ */
+export function printModel(modelId: string): void {
+  console.log(pc.dim(`Model: ${modelId}`));
+}
+
+/**
+ * Format milliseconds as human-readable duration.
+ * Under 60s: "1.2s", over 60s: "1m 12s"
+ */
+export function formatDuration(ms: number): string {
+  if (ms < 60_000) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+  const minutes = Math.floor(ms / 60_000);
+  const seconds = ((ms % 60_000) / 1000).toFixed(0);
+  return `${minutes}m ${seconds}s`;
+}
+
+/**
+ * Estimate token count from character count and format for display.
+ * Uses chars/4 approximation (standard for English text with Claude tokenizers).
+ */
+export function estimateTokens(charCount: number): string {
+  const tokens = Math.round(charCount / 4);
+  if (tokens >= 1000) {
+    return `~${Math.round(tokens / 1000)}k tokens`;
+  }
+  return `~${tokens} tokens`;
 }
 
 /**
