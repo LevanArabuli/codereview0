@@ -1,5 +1,11 @@
 import type { PRData } from './types.js';
 
+/** Valid review mode strings */
+export const REVIEW_MODES = ['strict', 'detailed', 'lenient', 'balanced'] as const;
+
+/** A review mode that controls the scope and thoroughness of findings */
+export type ReviewMode = typeof REVIEW_MODES[number];
+
 /** Maximum diff size in characters before truncation (~80KB, safe for Claude context window) */
 const MAX_DIFF_CHARS = 80_000;
 
@@ -18,16 +24,35 @@ function truncateDiff(diff: string): string {
   return truncated.slice(0, cutPoint) + '\n\n[... diff truncated — remaining files omitted due to size. Focus review on the files shown above.]';
 }
 
+/** Prompt overlay paragraphs for each review mode, appended after the base prompt */
+const MODE_OVERLAYS: Record<ReviewMode, string> = {
+  strict: `\n\nREVIEW MODE — STRICT: Focus exclusively on bugs, security vulnerabilities, and critical suggestions that could cause real problems if ignored (race conditions, data loss risks, resource leaks). Do NOT report regular code quality suggestions, style preferences, or nitpicks. Only report findings with severity "bug", "security", or "suggestion" where the suggestion addresses a critical risk. If in doubt whether a suggestion is critical, omit it.`,
+
+  detailed: `\n\nREVIEW MODE — DETAILED: Provide a thorough, comprehensive review covering ALL categories. Include nitpicks and minor style observations — mark each nitpick finding clearly with severity "nitpick" so users can scan past them. Be exhaustive: report every issue you notice, no matter how small.`,
+
+  lenient: `\n\nREVIEW MODE — LENIENT: Report bugs and security issues as normal. For suggestions, apply a high bar — only include suggestions that represent significant improvements to correctness, performance, or maintainability. Skip minor suggestions, style preferences, and anything that is "nice to have" but not impactful. Do NOT report nitpicks at all. When uncertain whether a suggestion meets the bar, omit it.`,
+
+  balanced: `\n\nREVIEW MODE — BALANCED: Report bugs and security issues as normal. Include suggestions that represent meaningful improvements to readability, maintainability, performance, or design. Do NOT report nitpicks — skip minor style preferences and trivial observations. Focus on being a helpful colleague: flag what matters, skip what doesn't.`,
+};
+
+/**
+ * Get the prompt overlay text for a given review mode.
+ * The overlay is appended to both quick and deep prompts identically.
+ */
+export function getModeOverlay(mode: ReviewMode): string {
+  return MODE_OVERLAYS[mode];
+}
+
 /**
  * Build a complete review prompt from PR data for Claude CLI analysis.
  *
  * The prompt includes a reviewer persona, PR metadata in XML tags,
  * the raw unified diff, finding format instructions, and scope guidance.
  */
-export function buildPrompt(prData: PRData): string {
+export function buildPrompt(prData: PRData, mode?: ReviewMode): string {
   const description = prData.body || '(no description provided)';
 
-  return `You are an experienced software engineer reviewing a pull request. Your role is to be a helpful, constructive colleague -- not a pedantic gatekeeper. Focus on issues that matter: bugs, security vulnerabilities, logic errors, and meaningful code quality improvements.
+  const basePrompt = `You are an experienced software engineer reviewing a pull request. Your role is to be a helpful, constructive colleague -- not a pedantic gatekeeper. Focus on issues that matter: bugs, security vulnerabilities, logic errors, and meaningful code quality improvements.
 
 Review the following pull request diff and identify any issues.
 
@@ -66,6 +91,9 @@ If test files appear in the diff alongside source files, briefly assess whether 
 IMPORTANT: Respond with ONLY a valid JSON object matching this exact structure — no explanation, no markdown, no tool calls:
 {"findings": [{"file": "string", "line": number, "severity": "bug"|"security"|"suggestion"|"nitpick", "confidence": "high"|"medium"|"low", "category": "string", "description": "string"}]}
 Optional fields per finding: "endLine" (number), "suggestedFix" (string), "relatedLocations" ([{"file": "string", "line": number, "reason": "string"}])`;
+
+  const effectiveMode = mode ?? 'balanced';
+  return basePrompt + getModeOverlay(effectiveMode);
 }
 
 /**
@@ -75,11 +103,11 @@ Optional fields per finding: "endLine" (number), "suggestedFix" (string), "relat
  * and Glob tools to explore the repository beyond the diff, finding cross-file
  * impacts, broken callers, missing updates, and pattern violations.
  */
-export function buildDeepPrompt(prData: PRData): string {
+export function buildDeepPrompt(prData: PRData, mode?: ReviewMode): string {
   const description = prData.body || '(no description provided)';
   const changedFileList = prData.files.map(f => `- ${f.filename} (${f.status}: +${f.additions} -${f.deletions})`).join('\n');
 
-  return `You are a senior software engineer performing a deep codebase analysis of a pull request. Your goal is to find cross-file impacts -- issues that are NOT visible from the diff alone but require understanding how the changes interact with the rest of the codebase.
+  const basePrompt = `You are a senior software engineer performing a deep codebase analysis of a pull request. Your goal is to find cross-file impacts -- issues that are NOT visible from the diff alone but require understanding how the changes interact with the rest of the codebase.
 
 <pr_metadata>
 Title: ${prData.title}
@@ -154,4 +182,7 @@ Follow this approach to find cross-file issues:
 IMPORTANT: Respond with ONLY a valid JSON object matching this exact structure -- no explanation, no markdown, no tool calls:
 {"findings": [{"file": "string", "line": number, "severity": "bug"|"security"|"suggestion"|"nitpick", "confidence": "high"|"medium"|"low", "category": "string", "description": "string"}]}
 Optional fields per finding: "endLine" (number), "suggestedFix" (string), "relatedLocations" ([{"file": "string", "line": number, "reason": "string"}])`;
+
+  const effectiveMode = mode ?? 'balanced';
+  return basePrompt + getModeOverlay(effectiveMode);
 }
