@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { printPRSummary, printErrors, printVerbose, printFindings, printAnalysisSummary, extractHeadline } from '../src/output.js';
+import { printPRSummary, printErrors, printDebug, printModel, formatDuration, estimateTokens, printFindings, printAnalysisSummary, extractHeadline } from '../src/output.js';
 import type { PRData, PrereqFailure } from '../src/types.js';
 import type { ReviewFinding } from '../src/schemas.js';
 
@@ -109,7 +109,7 @@ describe('printErrors', () => {
   });
 });
 
-describe('printVerbose', () => {
+describe('printDebug', () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -120,23 +120,95 @@ describe('printVerbose', () => {
     logSpy.mockRestore();
   });
 
-  it('prints the raw diff content', () => {
-    printVerbose(mockPR);
+  it('prints message with [debug] prefix', () => {
+    printDebug('Fetch: 1.2s');
     const output = logSpy.mock.calls.map((c) => c[0]).join('\n');
-    expect(output).toContain('--- a/src/foo.ts');
-    expect(output).toContain('+new line');
+    expect(output).toContain('[debug]');
+    expect(output).toContain('Fetch: 1.2s');
   });
 
-  it('prints diff length info', () => {
-    printVerbose(mockPR);
-    const output = logSpy.mock.calls.map((c) => c[0]).join('\n');
-    expect(output).toContain(`${mockPR.diff.length} characters`);
+  it('outputs a single console.log call', () => {
+    printDebug('test message');
+    expect(logSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('printModel', () => {
+  let logSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
-  it('prints section header', () => {
-    printVerbose(mockPR);
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
+  it('prints model name with Model: prefix', () => {
+    printModel('claude-opus-4-6');
     const output = logSpy.mock.calls.map((c) => c[0]).join('\n');
-    expect(output).toContain('Raw Diff');
+    expect(output).toContain('Model:');
+    expect(output).toContain('claude-opus-4-6');
+  });
+
+  it('outputs a single console.log call', () => {
+    printModel('claude-sonnet-4-20250514');
+    expect(logSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('formatDuration', () => {
+  it('formats sub-60s as seconds with one decimal', () => {
+    expect(formatDuration(1234)).toBe('1.2s');
+  });
+
+  it('formats exactly 0ms', () => {
+    expect(formatDuration(0)).toBe('0.0s');
+  });
+
+  it('formats sub-second durations', () => {
+    expect(formatDuration(456)).toBe('0.5s');
+  });
+
+  it('formats 60s+ as minutes and seconds', () => {
+    expect(formatDuration(72_000)).toBe('1m 12s');
+  });
+
+  it('formats exact minutes', () => {
+    expect(formatDuration(120_000)).toBe('2m 0s');
+  });
+
+  it('formats just under 60s as seconds', () => {
+    expect(formatDuration(59_999)).toBe('60.0s');
+  });
+
+  it('formats 60s exactly as minutes', () => {
+    expect(formatDuration(60_000)).toBe('1m 0s');
+  });
+});
+
+describe('estimateTokens', () => {
+  it('estimates small counts without k suffix', () => {
+    expect(estimateTokens(100)).toBe('~25 tokens');
+  });
+
+  it('estimates 1000+ tokens with k suffix', () => {
+    expect(estimateTokens(4000)).toBe('~1k tokens');
+  });
+
+  it('rounds to nearest k for large counts', () => {
+    expect(estimateTokens(48000)).toBe('~12k tokens');
+  });
+
+  it('handles zero characters', () => {
+    expect(estimateTokens(0)).toBe('~0 tokens');
+  });
+
+  it('estimates boundary between plain and k format', () => {
+    // 4000 chars / 4 = 1000 tokens -> should use k format
+    expect(estimateTokens(4000)).toBe('~1k tokens');
+    // 3996 chars / 4 = 999 tokens -> plain format
+    expect(estimateTokens(3996)).toBe('~999 tokens');
   });
 });
 
