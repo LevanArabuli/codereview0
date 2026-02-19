@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getModeOverlay, buildPrompt, buildDeepPrompt, REVIEW_MODES } from '../src/prompt.js';
+import { getModeOverlay, buildPrompt, buildDeepPrompt, buildAgenticPrompt, REVIEW_MODES } from '../src/prompt.js';
 import type { ReviewMode } from '../src/prompt.js';
 import type { PRData } from '../src/types.js';
 
@@ -142,5 +142,95 @@ describe('buildDeepPrompt with mode', () => {
       expect(prompt).toContain('Test PR');
       expect(prompt).toContain('cross-file');
     }
+  });
+});
+
+describe('buildAgenticPrompt', () => {
+  it('contains PR metadata', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toContain('Test PR');
+    expect(prompt).toContain('Test body');
+    expect(prompt).toContain('feature');
+    expect(prompt).toContain('main');
+  });
+
+  it('contains diff content', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toContain(mockPR.diff);
+  });
+
+  it('contains exploration instructions for all four categories', () => {
+    const prompt = buildAgenticPrompt(mockPR).toLowerCase();
+    expect(prompt).toMatch(/broken callers|callers/);
+    expect(prompt).toMatch(/pattern violations|conventions/);
+    expect(prompt).toContain('duplication');
+    expect(prompt).toMatch(/test coverage|test/);
+  });
+
+  it('contains separated sections instruction', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toMatch(/diff.*findings.*first/i);
+    expect(prompt).toMatch(/cross-file.*findings/i);
+  });
+
+  it('contains JSON output instruction', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toContain('IMPORTANT: Respond with ONLY a valid JSON');
+  });
+
+  it('mode overlay included for strict', () => {
+    const prompt = buildAgenticPrompt(mockPR, 'strict');
+    const overlay = getModeOverlay('strict');
+    expect(prompt).toContain(overlay);
+  });
+
+  it('defaults to balanced mode', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    const balancedOverlay = getModeOverlay('balanced');
+    expect(prompt).toContain(balancedOverlay);
+  });
+
+  it('same overlay for all prompt types', () => {
+    for (const mode of REVIEW_MODES) {
+      const quickPrompt = buildPrompt(mockPR, mode);
+      const agenticPrompt = buildAgenticPrompt(mockPR, mode);
+      const overlay = getModeOverlay(mode);
+      expect(quickPrompt).toContain(overlay);
+      expect(agenticPrompt).toContain(overlay);
+    }
+  });
+
+  it('no file budget or cap in prompt', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).not.toMatch(/at most/i);
+    expect(prompt).not.toMatch(/file budget/i);
+    expect(prompt).not.toMatch(/file cap/i);
+    expect(prompt).not.toMatch(/explore at most/i);
+  });
+
+  it('contains evidence requirement', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toMatch(/evidence|specific files|relatedLocations/);
+  });
+
+  it('contains changed files list', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toContain('test.ts');
+  });
+
+  it('uses sectioned headers', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toContain('## Review Instructions');
+    expect(prompt).toContain('## Codebase Exploration');
+    expect(prompt).toContain('## Output Format');
+  });
+
+  it('buildPrompt still works with extracted constants', () => {
+    const prompt = buildPrompt(mockPR);
+    expect(prompt).toContain('IMPORTANT: Respond with ONLY a valid JSON');
+    expect(prompt).toContain('bug: logic errors, crashes');
+    expect(prompt).toContain('security: injection vulnerabilities');
+    expect(prompt).toContain('suggestion: meaningful improvements');
+    expect(prompt).toContain('nitpick: minor style preferences');
   });
 });
