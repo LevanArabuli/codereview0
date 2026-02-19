@@ -186,3 +186,9 @@ Optional fields per finding: "endLine" (number), "suggestedFix" (string), "relat
   const effectiveMode = mode ?? 'balanced';
   return basePrompt + getModeOverlay(effectiveMode);
 }
+
+// CLI flag verification (Phase 11, verified against Claude CLI v2.1.47):
+// --append-system-prompt: EXISTS -- appends to default system prompt, documented in --help
+// --max-budget-usd: EXISTS -- maximum dollar spend for API calls, only works with --print
+// --max-turns: UNDOCUMENTED -- not listed in --help output, but functional; already used in analyzer.ts (lines 78-79, 173)
+// --tools: EXISTS -- specifies available built-in tools (e.g. "Bash,Edit,Read"), already used in analyzer.ts
