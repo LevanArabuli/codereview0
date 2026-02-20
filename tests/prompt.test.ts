@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getModeOverlay, buildPrompt, buildDeepPrompt, buildAgenticPrompt, REVIEW_MODES } from '../src/prompt.js';
+import { getModeOverlay, buildPrompt, buildAgenticPrompt, REVIEW_MODES } from '../src/prompt.js';
 import type { ReviewMode } from '../src/prompt.js';
 import type { PRData } from '../src/types.js';
 
@@ -113,35 +113,12 @@ describe('buildPrompt with mode', () => {
     expect(overlayIndex).toBeGreaterThan(jsonInstructionIndex);
   });
 
-  it('same mode produces same overlay for quick and deep prompts', () => {
+  it('same mode produces same overlay for quick and agentic prompts', () => {
     const quickPrompt = buildPrompt(mockPR, 'strict');
-    const deepPrompt = buildDeepPrompt(mockPR, 'strict');
+    const agenticPrompt = buildAgenticPrompt(mockPR, 'strict');
     const overlay = getModeOverlay('strict');
     expect(quickPrompt).toContain(overlay);
-    expect(deepPrompt).toContain(overlay);
-  });
-});
-
-describe('buildDeepPrompt with mode', () => {
-  it('includes mode overlay in output', () => {
-    const prompt = buildDeepPrompt(mockPR, 'detailed');
-    const overlay = getModeOverlay('detailed');
-    expect(prompt).toContain(overlay);
-  });
-
-  it('defaults to balanced overlay when mode is undefined', () => {
-    const prompt = buildDeepPrompt(mockPR);
-    const balancedOverlay = getModeOverlay('balanced');
-    expect(prompt).toContain(balancedOverlay);
-  });
-
-  it('includes base deep prompt content regardless of mode', () => {
-    for (const mode of REVIEW_MODES) {
-      const prompt = buildDeepPrompt(mockPR, mode);
-      expect(prompt).toContain('deep codebase analysis');
-      expect(prompt).toContain('Test PR');
-      expect(prompt).toContain('cross-file');
-    }
+    expect(agenticPrompt).toContain(overlay);
   });
 });
 

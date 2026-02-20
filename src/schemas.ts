@@ -34,5 +34,3 @@ export type ReviewFinding = z.infer<typeof ReviewFindingSchema>;
 /** Complete review result containing all findings */
 export type ReviewResult = z.infer<typeof ReviewResultSchema>;
 
-/** JSON Schema string for ReviewResult, used with Claude CLI --json-schema flag */
-export const reviewJsonSchema = JSON.stringify(z.toJSONSchema(ReviewResultSchema));

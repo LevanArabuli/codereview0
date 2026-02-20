@@ -1,7 +1,7 @@
 import { execFile as execFileCb, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { ReviewResultSchema } from "./schemas.js";
-import { buildPrompt, buildDeepPrompt, buildAgenticPrompt, type ReviewMode } from "./prompt.js";
+import { buildPrompt, buildAgenticPrompt, type ReviewMode } from "./prompt.js";
 import type { PRData } from "./types.js";
 import type { ReviewFinding } from "./schemas.js";
 
@@ -15,12 +15,6 @@ const MAX_BUFFER = 10 * 1024 * 1024;
 
 /** Max number of analysis attempts (1 initial + 1 retry) */
 const MAX_ATTEMPTS = 2;
-
-/** Deep exploration timeout: 4 minutes */
-const EXPLORATION_TIMEOUT_MS = 4 * 60 * 1000;
-
-/** Max agentic exploration turns for deep mode */
-const MAX_EXPLORATION_TURNS = 25;
 
 const MAX_ANALYSIS_TURNS = 10;
 
@@ -156,100 +150,6 @@ export async function analyzeDiff(prData: PRData, model?: string, mode?: ReviewM
 }
 
 /**
- * Perform deep agentic exploration of a cloned repo to find cross-file impacts.
- *
- * Invokes `claude -p` as a multi-turn agentic subprocess with Read, Grep, Glob
- * tools and cwd set to the cloned repo. Uses prompt-based JSON instruction
- * (no --json-schema flag) and the same double-parse pattern as analyzeDiff.
- *
- * On timeout or error, returns empty findings (graceful degradation) so that
- * quick-mode findings still carry the review.
- */
-export async function analyzeDeep(
-  prData: PRData,
-  clonePath: string,
-  model?: string,
-  mode?: ReviewMode,
-): Promise<AnalysisResult> {
-  const prompt = buildDeepPrompt(prData, mode);
-
-  try {
-    const args = [
-      "-p",
-      prompt,
-      "--max-turns",
-      String(MAX_EXPLORATION_TURNS),
-      "--tools",
-      "Read,Grep,Glob",
-      "--output-format",
-      "json",
-    ];
-    if (model) {
-      args.push("--model", model);
-    }
-    const p = execFile(
-      "claude",
-      args,
-      {
-        cwd: clonePath,
-        timeout: EXPLORATION_TIMEOUT_MS,
-        maxBuffer: MAX_BUFFER,
-        encoding: "utf-8",
-      },
-    );
-    p.child.stdin?.end();
-    const { stdout } = await p;
-
-    // Double JSON parse: first the Claude CLI wrapper, then the result
-    const wrapper: ClaudeResponse = JSON.parse(stdout);
-
-    if (wrapper.is_error || wrapper.subtype !== "success") {
-      throw new Error(`Claude CLI error: ${wrapper.result ?? "unknown error"}`);
-    }
-
-    // Parse result: try direct JSON parse, then extract JSON from text
-    let data: unknown;
-    try {
-      data = JSON.parse(wrapper.result);
-    } catch {
-      const match = wrapper.result.match(/\{[\s\S]*"findings"[\s\S]*\}/);
-      if (match) {
-        data = JSON.parse(match[0]);
-      } else {
-        throw new Error("Could not find JSON in Claude response");
-      }
-    }
-
-    // Validate against Zod schema
-    const parsed = ReviewResultSchema.safeParse(data);
-    if (!parsed.success) {
-      throw new Error(`Response validation failed: ${parsed.error.message}`);
-    }
-
-    return { findings: parsed.data.findings, model: extractModelId(wrapper, model) };
-  } catch (error: unknown) {
-    // Check for timeout (execFile sets killed=true when process is killed due to timeout)
-    if (
-      error instanceof Error &&
-      "killed" in error &&
-      (error as NodeJS.ErrnoException & { killed?: boolean }).killed
-    ) {
-      console.error(
-        "Deep exploration timed out -- proceeding with quick analysis only",
-      );
-      return { findings: [], model: model ?? 'unknown' };
-    }
-
-    // All other errors: degrade gracefully to empty findings
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(
-      `Deep exploration failed: ${message} -- proceeding with quick analysis only`,
-    );
-    return { findings: [], model: model ?? 'unknown' };
-  }
-}
-
-/**
  * Parse stream-json output to find the final 'result' event.
  *
  * With `--output-format stream-json`, stdout contains newline-delimited JSON
@@ -277,7 +177,7 @@ function parseStreamResult(stdout: string): ClaudeResponse {
  * Invokes `claude -p` with `--output-format stream-json` and `--verbose` via
  * `spawn`, streaming Claude's exploration output (stderr) to the terminal in
  * real-time while accumulating stdout for JSON parsing. Returns the same
- * `AnalysisResult { findings, model }` shape as `analyzeDiff()` and `analyzeDeep()`.
+ * `AnalysisResult { findings, model }` shape as `analyzeDiff()`.
  *
  * On any failure (timeout, parse error, max-turns exceeded), throws an Error
  * with 'Deep review failed: [reason]' -- no fallback to quick mode.

@@ -164,13 +164,6 @@ const SEVERITY_ICONS: Record<string, string> = {
 };
 
 /**
- * Print a summary line showing how many files were analyzed during deep exploration.
- */
-export function printExplorationSummary(filesAnalyzed: number): void {
-  console.log(pc.dim(`  ${filesAnalyzed} files analyzed`));
-}
-
-/**
  * Split a description into headline (first sentence) and detail (remainder).
  * Splits on the first sentence-ending punctuation (. ! ?) followed by a space and uppercase letter.
  * If no split point found, the entire description becomes the headline with no detail.
