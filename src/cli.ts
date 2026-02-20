@@ -3,9 +3,9 @@ import pc from 'picocolors';
 import { parsePRUrl } from './url-parser.js';
 import { checkPrerequisites } from './prerequisites.js';
 import { createOctokit, fetchPRData, postReview } from './github.js';
-import { printPRSummary, printErrors, printDebug, printModel, printMode, formatDuration, estimateTokens, printProgress, printProgressDone, printAnalysisSummary, printFindings, printExplorationSummary } from './output.js';
-import { buildPrompt, buildDeepPrompt, type ReviewMode } from './prompt.js';
-import { analyzeDiff, analyzeDeep } from './analyzer.js';
+import { printPRSummary, printErrors, printDebug, printModel, printMode, formatDuration, estimateTokens, printProgress, printProgressDone, printAnalysisSummary, printFindings } from './output.js';
+import { buildPrompt, type ReviewMode } from './prompt.js';
+import { analyzeDiff, analyzeAgentic } from './analyzer.js';
 import { cloneRepo, getClonePath, promptCleanup } from './cloner.js';
 import { parseDiffHunks } from './diff-parser.js';
 import { partitionFindings, buildReviewBody } from './review-builder.js';
@@ -78,7 +78,7 @@ program
     let findings;
 
     if (options.deep) {
-      // Deep mode: clone -> quick analysis -> deep exploration -> merge findings
+      // Deep mode: clone -> agentic review (or fallback to quick if clone fails)
 
       // 4a. Clone repository
       let cloneSucceeded = false;
@@ -101,54 +101,42 @@ program
         printDebug(`Clone: ${formatDuration(cloneDuration)}`);
       }
 
-      // 4b. Quick analysis (always runs)
-      let quickFindings;
-      let diffModel = '';
-      const diffPrompt = buildPrompt(prData, options.mode);
-      const analyzeStart = performance.now();
-      try {
-        printProgress('Analyzing diff...');
-        const result = await analyzeDiff(prData, options.model, options.mode);
-        printProgressDone();
-        quickFindings = result.findings;
-        diffModel = result.model;
-      } catch (error: unknown) {
-        console.log(); // newline after progress message
-        console.error(pc.red('Analysis failed'));
-        if (error instanceof Error && error.message) {
-          console.error(error.message);
-        }
-        process.exit(EXIT_ANALYSIS_ERROR);
-      }
-      const analyzeDuration = performance.now() - analyzeStart;
-
-      // Model line always visible after first analysis
-      printModel(diffModel);
-
-      if (options.verbose) {
-        printDebug(`Analyze (diff): ${formatDuration(analyzeDuration)}, prompt ${estimateTokens(diffPrompt.length)}`);
-      }
-
-      // 4c. Deep exploration (only if clone succeeded)
-      let deepFindings: typeof quickFindings = [];
       if (cloneSucceeded) {
-        const deepPrompt = buildDeepPrompt(prData, options.mode);
-        const exploreStart = performance.now();
-        printProgress('Exploring codebase...');
-        const deepResult = await analyzeDeep(prData, clonePath, options.model, options.mode);
-        printProgressDone();
-        deepFindings = deepResult.findings;
-        const exploreDuration = performance.now() - exploreStart;
-        if (deepFindings.length > 0) {
-          printExplorationSummary(deepFindings.length);
-        }
+        // 4b. Agentic review (single-pass deep analysis)
+        console.log(pc.dim('Running deep review...'));
+        const analyzeStart = performance.now();
+        const result = await analyzeAgentic(prData, clonePath, options.model, options.mode, options.verbose);
+        const analyzeDuration = performance.now() - analyzeStart;
+        findings = result.findings;
+        printModel(result.model);
         if (options.verbose) {
-          printDebug(`Analyze (explore): ${formatDuration(exploreDuration)}, prompt ${estimateTokens(deepPrompt.length)}`);
+          printDebug(`Analyze (deep): ${formatDuration(analyzeDuration)}`);
+        }
+      } else {
+        // 4c. Fallback to quick review (clone failed)
+        const quickPrompt = buildPrompt(prData, options.mode);
+        const analyzeStart = performance.now();
+        try {
+          printProgress('Analyzing diff...');
+          const result = await analyzeDiff(prData, options.model, options.mode);
+          printProgressDone();
+          findings = result.findings;
+
+          const analyzeDuration = performance.now() - analyzeStart;
+          printModel(result.model);
+
+          if (options.verbose) {
+            printDebug(`Analyze: ${formatDuration(analyzeDuration)}, prompt ${estimateTokens(quickPrompt.length)}`);
+          }
+        } catch (error: unknown) {
+          console.log(); // newline after progress message
+          console.error(pc.red('Analysis failed'));
+          if (error instanceof Error && error.message) {
+            console.error(error.message);
+          }
+          process.exit(EXIT_ANALYSIS_ERROR);
         }
       }
-
-      // 4d. Merge findings (printFindings owns sorting)
-      findings = [...quickFindings, ...deepFindings];
 
       // 5. Terminal output (always shown)
       printAnalysisSummary(findings);
