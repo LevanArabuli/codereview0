@@ -1,7 +1,7 @@
-import { execFile as execFileCb } from "node:child_process";
+import { execFile as execFileCb, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { ReviewResultSchema } from "./schemas.js";
-import { buildPrompt, buildDeepPrompt, type ReviewMode } from "./prompt.js";
+import { buildPrompt, buildDeepPrompt, buildAgenticPrompt, type ReviewMode } from "./prompt.js";
 import type { PRData } from "./types.js";
 import type { ReviewFinding } from "./schemas.js";
 
@@ -23,6 +23,13 @@ const EXPLORATION_TIMEOUT_MS = 4 * 60 * 1000;
 const MAX_EXPLORATION_TURNS = 25;
 
 const MAX_ANALYSIS_TURNS = 10;
+
+/** Agentic review timeout: 10 minutes */
+const AGENTIC_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** Max agentic turns -- safety net to prevent infinite loops (user decision: 50-100 range, midpoint) */
+const MAX_AGENTIC_TURNS = 75;
+
 /** Shape of the JSON wrapper returned by Claude CLI --output-format json */
 interface ClaudeResponse {
   type: string;
@@ -240,4 +247,160 @@ export async function analyzeDeep(
     );
     return { findings: [], model: model ?? 'unknown' };
   }
+}
+
+/**
+ * Parse stream-json output to find the final 'result' event.
+ *
+ * With `--output-format stream-json`, stdout contains newline-delimited JSON
+ * events. The last event with `type === 'result'` contains the complete response
+ * in the same shape as the `--output-format json` wrapper (ClaudeResponse).
+ */
+function parseStreamResult(stdout: string): ClaudeResponse {
+  const lines = stdout.trim().split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const event = JSON.parse(lines[i]);
+      if (event.type === 'result') {
+        return event as ClaudeResponse;
+      }
+    } catch {
+      // Skip malformed lines
+    }
+  }
+  throw new Error('Deep review failed: no result event found in stream output');
+}
+
+/**
+ * Perform a unified agentic code review via a single Claude CLI session.
+ *
+ * Invokes `claude -p` with `--output-format stream-json` and `--verbose` via
+ * `spawn`, streaming Claude's exploration output (stderr) to the terminal in
+ * real-time while accumulating stdout for JSON parsing. Returns the same
+ * `AnalysisResult { findings, model }` shape as `analyzeDiff()` and `analyzeDeep()`.
+ *
+ * On any failure (timeout, parse error, max-turns exceeded), throws an Error
+ * with 'Deep review failed: [reason]' -- no fallback to quick mode.
+ */
+export async function analyzeAgentic(
+  prData: PRData,
+  clonePath: string,
+  model?: string,
+  mode?: ReviewMode,
+  verbose?: boolean,
+): Promise<AnalysisResult> {
+  const prompt = buildAgenticPrompt(prData, mode);
+
+  const args = [
+    '-p', prompt,
+    '--output-format', 'stream-json',
+    '--verbose',
+    '--max-turns', String(MAX_AGENTIC_TURNS),
+  ];
+  if (model) {
+    args.push('--model', model);
+  }
+
+  return new Promise<AnalysisResult>((resolve, reject) => {
+    const child = spawn('claude', args, {
+      cwd: clonePath,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    child.stdin?.end();
+
+    // Accumulate stdout for JSON parsing
+    let stdout = '';
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+
+    // Accumulate stderr AND stream to terminal for live exploration visibility
+    let stderr = '';
+    child.stderr.on('data', (chunk: Buffer) => {
+      const text = chunk.toString();
+      stderr += text;
+      process.stderr.write(chunk);
+    });
+
+    // Manual timeout -- spawn does NOT support the timeout option
+    const timeoutId = setTimeout(() => {
+      child.kill('SIGTERM');
+    }, AGENTIC_TIMEOUT_MS);
+
+    let settled = false;
+
+    child.on('error', (err) => {
+      clearTimeout(timeoutId);
+      if (!settled) {
+        settled = true;
+        reject(new Error(`Deep review failed: ${err.message}`));
+      }
+    });
+
+    child.on('close', (code, signal) => {
+      clearTimeout(timeoutId);
+      if (settled) return;
+      settled = true;
+
+      // Timeout: killed by our setTimeout handler
+      if (signal === 'SIGTERM' || signal === 'SIGKILL') {
+        reject(new Error('Deep review failed: timed out after 10 minutes'));
+        return;
+      }
+
+      // Non-zero exit
+      if (code !== 0) {
+        if (verbose) {
+          console.error('\n[debug] Raw stdout:', stdout.slice(0, 2000));
+          console.error('[debug] Raw stderr:', stderr.slice(0, 2000));
+        }
+        const reason = stderr.includes('max turns')
+          ? `max turns (${MAX_AGENTIC_TURNS}) reached without completing the review`
+          : `claude exited with code ${code}`;
+        reject(new Error(`Deep review failed: ${reason}`));
+        return;
+      }
+
+      // Successful exit: parse stream-json output
+      try {
+        const wrapper = parseStreamResult(stdout);
+
+        if (wrapper.is_error || wrapper.subtype !== 'success') {
+          throw new Error(wrapper.result ?? 'unknown error');
+        }
+
+        // Double parse: result field contains the findings JSON string
+        let data: unknown;
+        try {
+          data = JSON.parse(wrapper.result);
+        } catch {
+          const match = wrapper.result.match(/\{[\s\S]*"findings"[\s\S]*\}/);
+          if (match) {
+            data = JSON.parse(match[0]);
+          } else {
+            throw new Error('could not find JSON in response');
+          }
+        }
+
+        // Validate against Zod schema
+        const parsed = ReviewResultSchema.safeParse(data);
+        if (!parsed.success) {
+          throw new Error(`response validation failed: ${parsed.error.message}`);
+        }
+
+        resolve({
+          findings: parsed.data.findings,
+          model: extractModelId(wrapper, model),
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (verbose) {
+          console.error('\n[debug] Raw stdout:', stdout.slice(0, 2000));
+          console.error('[debug] Raw stderr:', stderr.slice(0, 2000));
+        }
+        reject(new Error(`Deep review failed: ${message}`));
+      }
+    });
+  });
 }
