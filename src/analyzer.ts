@@ -38,10 +38,20 @@ interface ClaudeResponse {
   modelUsage?: Record<string, unknown>;
 }
 
+/** Operational metadata from Claude CLI agentic session */
+export interface AnalysisMeta {
+  cost_usd: number;
+  duration_ms: number;
+  num_turns: number;
+  duration_api_ms: number;
+  session_id: string;
+}
+
 /** Structured analysis result with findings and model identification */
 export interface AnalysisResult {
   findings: ReviewFinding[];
   model: string;
+  meta?: AnalysisMeta;
 }
 
 /**
@@ -292,6 +302,13 @@ export async function analyzeAgentic(
         resolve({
           findings: parsed.data.findings,
           model: extractModelId(wrapper, model),
+          meta: {
+            cost_usd: wrapper.cost_usd ?? 0,
+            duration_ms: wrapper.duration_ms ?? 0,
+            num_turns: wrapper.num_turns ?? 0,
+            duration_api_ms: wrapper.duration_api_ms ?? 0,
+            session_id: wrapper.session_id ?? '',
+          },
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
