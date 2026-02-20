@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { printPRSummary, printErrors, printDebug, printModel, printMode, formatDuration, estimateTokens, printFindings, printAnalysisSummary, extractHeadline } from '../src/output.js';
+import { printPRSummary, printErrors, printDebug, printModel, printMode, formatDuration, formatCost, estimateTokens, printFindings, printAnalysisSummary, extractHeadline, printMeta } from '../src/output.js';
 import type { PRData, PrereqFailure } from '../src/types.js';
 import type { ReviewFinding } from '../src/schemas.js';
 
@@ -449,5 +449,78 @@ describe('printAnalysisSummary', () => {
     const output = logSpy.mock.calls.map((c) => c[0] as string).join('\n');
     expect(output).toContain('1 bug');
     expect(output).not.toContain('1 bugs');
+  });
+});
+
+describe('formatCost', () => {
+  it('formats costs >= $0.01 with 2 decimal places', () => {
+    expect(formatCost(0.04)).toBe('$0.04');
+    expect(formatCost(1.5)).toBe('$1.50');
+    expect(formatCost(0.01)).toBe('$0.01');
+  });
+
+  it('formats costs < $0.01 with 4 decimal places', () => {
+    expect(formatCost(0.003)).toBe('$0.0030');
+    expect(formatCost(0.0001)).toBe('$0.0001');
+  });
+
+  it('formats zero cost', () => {
+    expect(formatCost(0)).toBe('$0.0000');
+  });
+});
+
+describe('printMeta', () => {
+  let logSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
+  it('prints cost, duration, and turns as debug lines', () => {
+    printMeta({
+      cost_usd: 0.0423,
+      duration_ms: 45200,
+      num_turns: 12,
+      duration_api_ms: 43100,
+      session_id: 'sess-abc',
+    });
+
+    const output = logSpy.mock.calls.map((c) => c[0]).join('\n');
+    expect(output).toContain('[debug]');
+    expect(output).toContain('Cost: $0.04');
+    expect(output).toContain('Duration: 45.2s');
+    expect(output).toContain('Turns: 12');
+  });
+
+  it('outputs exactly 3 debug lines', () => {
+    printMeta({
+      cost_usd: 0.01,
+      duration_ms: 1000,
+      num_turns: 5,
+      duration_api_ms: 900,
+      session_id: 'sess-xyz',
+    });
+
+    expect(logSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not display duration_api_ms or session_id', () => {
+    printMeta({
+      cost_usd: 0.05,
+      duration_ms: 30000,
+      num_turns: 8,
+      duration_api_ms: 28000,
+      session_id: 'sess-secret',
+    });
+
+    const output = logSpy.mock.calls.map((c) => c[0]).join('\n');
+    expect(output).not.toContain('28000');
+    expect(output).not.toContain('sess-secret');
+    expect(output).not.toContain('duration_api_ms');
+    expect(output).not.toContain('session_id');
   });
 });

@@ -1,6 +1,7 @@
 import pc from 'picocolors';
 import type { PRData, PrereqFailure } from './types.js';
 import type { ReviewFinding } from './schemas.js';
+import type { AnalysisMeta } from './analyzer.js';
 
 /**
  * Print a colored compact PR summary with diff-stat file list.
@@ -72,6 +73,16 @@ export function printModel(modelId: string): void {
 }
 
 /**
+ * Print operational metadata as [debug] lines.
+ * Only call when --verbose is active and meta is available.
+ */
+export function printMeta(meta: AnalysisMeta): void {
+  printDebug(`Cost: ${formatCost(meta.cost_usd)}`);
+  printDebug(`Duration: ${formatDuration(meta.duration_ms)}`);
+  printDebug(`Turns: ${meta.num_turns}`);
+}
+
+/**
  * Print the review mode as a dimmed header line.
  * Always visible (not verbose-only).
  */
@@ -90,6 +101,16 @@ export function formatDuration(ms: number): string {
   const minutes = Math.floor(ms / 60_000);
   const seconds = ((ms % 60_000) / 1000).toFixed(0);
   return `${minutes}m ${seconds}s`;
+}
+
+/**
+ * Format USD cost for display.
+ * Under $0.01: show 4 decimal places (e.g., "$0.0030").
+ * $0.01 and above: show 2 decimal places (e.g., "$0.04").
+ */
+export function formatCost(usd: number): string {
+  if (usd < 0.01) return `$${usd.toFixed(4)}`;
+  return `$${usd.toFixed(2)}`;
 }
 
 /**

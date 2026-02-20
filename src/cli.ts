@@ -3,7 +3,7 @@ import pc from 'picocolors';
 import { parsePRUrl } from './url-parser.js';
 import { checkPrerequisites } from './prerequisites.js';
 import { createOctokit, fetchPRData, postReview } from './github.js';
-import { printPRSummary, printErrors, printDebug, printModel, printMode, formatDuration, estimateTokens, printProgress, printProgressDone, printAnalysisSummary, printFindings } from './output.js';
+import { printPRSummary, printErrors, printDebug, printModel, printMode, printMeta, formatDuration, estimateTokens, printProgress, printProgressDone, printAnalysisSummary, printFindings } from './output.js';
 import { buildPrompt, type ReviewMode } from './prompt.js';
 import { analyzeDiff, analyzeAgentic } from './analyzer.js';
 import { cloneRepo, getClonePath, promptCleanup } from './cloner.js';
@@ -111,6 +111,9 @@ program
         printModel(result.model);
         if (options.verbose) {
           printDebug(`Analyze (deep): ${formatDuration(analyzeDuration)}`);
+          if (result.meta) {
+            printMeta(result.meta);
+          }
         }
       } else {
         // 4c. Fallback to quick review (clone failed)
