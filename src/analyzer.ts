@@ -28,7 +28,8 @@ const MAX_AGENTIC_TURNS = 75;
 interface ClaudeResponse {
   type: string;
   subtype: string;
-  cost_usd: number;
+  cost_usd?: number;           // Legacy field (CLI v1.x)
+  total_cost_usd?: number;     // Current field (CLI v2.x)
   is_error: boolean;
   duration_ms: number;
   duration_api_ms: number;
@@ -133,7 +134,17 @@ export async function analyzeDiff(prData: PRData, model?: string, mode?: ReviewM
         throw new Error(`Response validation failed: ${parsed.error.message}`);
       }
 
-      return { findings: parsed.data.findings, model: extractModelId(wrapper, model) };
+      return {
+        findings: parsed.data.findings,
+        model: extractModelId(wrapper, model),
+        meta: {
+          cost_usd: wrapper.total_cost_usd ?? wrapper.cost_usd ?? 0,
+          duration_ms: wrapper.duration_ms ?? 0,
+          num_turns: wrapper.num_turns ?? 0,
+          duration_api_ms: wrapper.duration_api_ms ?? 0,
+          session_id: wrapper.session_id ?? '',
+        },
+      };
     } catch (error: unknown) {
       // Check for timeout (execFile sets killed=true when process is killed due to timeout)
       if (
@@ -303,7 +314,7 @@ export async function analyzeAgentic(
           findings: parsed.data.findings,
           model: extractModelId(wrapper, model),
           meta: {
-            cost_usd: wrapper.cost_usd ?? 0,
+            cost_usd: wrapper.total_cost_usd ?? wrapper.cost_usd ?? 0,
             duration_ms: wrapper.duration_ms ?? 0,
             num_turns: wrapper.num_turns ?? 0,
             duration_api_ms: wrapper.duration_api_ms ?? 0,
