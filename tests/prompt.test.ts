@@ -73,7 +73,7 @@ describe('getModeOverlay', () => {
 
   it('balanced overlay skips nitpicks', () => {
     const overlay = getModeOverlay('balanced');
-    expect(overlay).toMatch(/not report nitpicks|do not.*nitpick/i);
+    expect(overlay).toMatch(/do not report/i);
   });
 
   it('returns different overlays for different modes', () => {

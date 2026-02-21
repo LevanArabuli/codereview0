@@ -32,7 +32,16 @@ const MODE_OVERLAYS: Record<ReviewMode, string> = {
 
   lenient: `\n\nREVIEW MODE — LENIENT: Report bugs and security issues as normal. For suggestions, apply a high bar — only include suggestions that represent significant improvements to correctness, performance, or maintainability. Skip minor suggestions, style preferences, and anything that is "nice to have" but not impactful. Do NOT report nitpicks at all. When uncertain whether a suggestion meets the bar, omit it.`,
 
-  balanced: `\n\nREVIEW MODE — BALANCED: Report bugs and security issues as normal. Include suggestions that represent meaningful improvements to readability, maintainability, performance, or design. Do NOT report nitpicks — skip minor style preferences and trivial observations. Focus on being a helpful colleague: flag what matters, skip what doesn't.`,
+  balanced: `\n\nREVIEW MODE — BALANCED: Report bugs and security issues as normal. Include suggestions that represent meaningful improvements to readability, maintainability, performance, or design.
+
+Do NOT report:
+- File formatting issues (trailing newlines, whitespace, indentation)
+- Idiomatic language/framework patterns (prop spreading in React, defensive ARIA attributes, common conventions) unless they cause a concrete bug
+- Theoretical concerns without evidence of actual breakage in the codebase
+
+Before including a suggestion, ask: "Would a senior engineer consider this worth commenting on in a code review?" If the answer is no, omit it.
+
+Focus on being a helpful colleague: flag what matters, skip what doesn't.`,
 };
 
 /**
@@ -143,11 +152,13 @@ ${truncateDiff(prData.diff)}
 
 ## Review Instructions
 
-Read the diff above and identify all issues in the changed code. Focus on the CHANGED code (lines with + prefix in the diff). Only flag issues in unchanged context lines if they are directly affected by the changes.
+Read the diff above thoroughly and identify all issues in the changed code before beginning any codebase exploration. Complete your diff analysis first — only then explore cross-file implications. Focus on the CHANGED code (lines with + prefix in the diff). Only flag issues in unchanged context lines if they are directly affected by the changes.
 
 ${FINDING_FORMAT_INSTRUCTIONS}
 
 Report all issues you find. Do not filter or limit the count. If you find no issues, return an empty findings array.
+
+If a fix requires changes beyond the scope of this PR (e.g., a broader refactoring effort across multiple components), frame it as a follow-up recommendation rather than a targeted suggestion. Do not flag issues that cannot be meaningfully addressed within this PR alone.
 
 ## Codebase Exploration
 
