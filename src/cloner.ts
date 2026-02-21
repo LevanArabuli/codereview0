@@ -6,8 +6,8 @@ import { promisify } from 'node:util';
 
 const execFile = promisify(execFileCb);
 
-/** Clone timeout: 1 minute */
-const CLONE_TIMEOUT_MS = 60_000;
+/** Clone timeout: 5 minutes (accommodates large enterprise repos with --depth 1) */
+const CLONE_TIMEOUT_MS = 300_000;
 
 /**
  * Get the local clone path for a repository.
