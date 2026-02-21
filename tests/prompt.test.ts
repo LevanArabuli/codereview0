@@ -76,6 +76,25 @@ describe('getModeOverlay', () => {
     expect(overlay).toMatch(/do not report/i);
   });
 
+  it('balanced overlay suppresses formatting issues', () => {
+    const overlay = getModeOverlay('balanced');
+    expect(overlay).toMatch(/trailing newline/i);
+    expect(overlay).toMatch(/whitespace/i);
+    expect(overlay).toMatch(/indentation/i);
+  });
+
+  it('balanced overlay suppresses idiomatic patterns', () => {
+    const overlay = getModeOverlay('balanced');
+    expect(overlay).toMatch(/prop spreading/i);
+    expect(overlay).toMatch(/defensive ARIA/i);
+    expect(overlay).toMatch(/concrete bug/i);
+  });
+
+  it('balanced overlay has senior engineer quality gate', () => {
+    const overlay = getModeOverlay('balanced');
+    expect(overlay).toMatch(/senior engineer/i);
+  });
+
   it('returns different overlays for different modes', () => {
     const overlays = REVIEW_MODES.map(m => getModeOverlay(m));
     const unique = new Set(overlays);
@@ -209,5 +228,24 @@ describe('buildAgenticPrompt', () => {
     expect(prompt).toContain('security: injection vulnerabilities');
     expect(prompt).toContain('suggestion: meaningful improvements');
     expect(prompt).toContain('nitpick: minor style preferences');
+  });
+
+  it('has diff-first analysis instruction', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toMatch(/Complete your diff analysis first/);
+    expect(prompt).toMatch(/before beginning any codebase exploration/);
+  });
+
+  it('has cross-scope framing instruction', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toMatch(/beyond the scope of this PR/);
+    expect(prompt).toMatch(/follow-up recommendation/);
+  });
+
+  it('exploration section unchanged (no file limits)', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toContain('Exploration is unlimited');
+    expect(prompt).not.toMatch(/at most/i);
+    expect(prompt).not.toMatch(/file budget/i);
   });
 });
