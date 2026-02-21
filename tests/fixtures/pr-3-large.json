@@ -1,0 +1,140 @@
+{
+  "pr": {
+    "url": "https://github.com/ALJAZEERAPLUS/ucms/pull/14942",
+    "title": "UCMS-20020: Author Profile V2 into its own RC",
+    "size_category": "large",
+    "files_changed": 55,
+    "additions": 3941,
+    "deletions": 72
+  },
+  "expected_findings": [
+    {
+      "file": "frontend/src/global/graphql/authorPostsQuery.graphql",
+      "line": 25,
+      "severity": "bug",
+      "confidence": "high",
+      "category": "missing-data",
+      "description": "The `email` field is not queried in `guestAuthor`. The `AuthorProfileContact` component checks `author.email` to render a mailto link, and the `AuthorProfile` component checks `author.email` for contact section visibility. Without querying `email`, it will always be `undefined` in production, and the email social link will never render.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    },
+    {
+      "file": "frontend/src/global/components/sticky-ads/index.js",
+      "line": 15,
+      "severity": "bug",
+      "confidence": "high",
+      "category": "props-mismatch",
+      "description": "The component uses rest destructuring `({ children, ...adsProps })` but its propTypes and defaultProps define `adsProps` as a named prop. This means ALL non-children props are spread into `<Ads>` as individual props. The `adsProps` entry in `defaultProps` is dead code since it's never destructured as a named prop.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    },
+    {
+      "file": "frontend/src/global/shared/stubs/authors.stubs.js",
+      "line": 100,
+      "severity": "bug",
+      "confidence": "high",
+      "category": "test-correctness",
+      "description": "The comment says 'component uses title, not jobTitle' but the component (`AuthorProfileHeader` line 55) actually reads `author.jobTitle`. The `authorWithTitle` stub creates a `title` property while `jobTitle` is inherited from the `author` spread. The header test creates `{ ...englishAuthor, title: undefined }` to test 'no title' but doesn't clear `jobTitle`, so the component still renders the job title - the test doesn't validate what it describes.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    },
+    {
+      "file": "frontend/src/global/components/author-profile/index.js",
+      "line": 92,
+      "severity": "bug",
+      "confidence": "medium",
+      "category": "props-mismatch",
+      "description": "The propTypes declare `title: PropTypes.string` but the component never uses `author.title` - it passes the author object to `AuthorProfileHeader` which reads `author.jobTitle`. This should be `jobTitle: PropTypes.string` to match the actual data contract.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    },
+    {
+      "file": "frontend/src/global/components/author-profile/author-profile-header/index.js",
+      "line": 16,
+      "severity": "bug",
+      "confidence": "medium",
+      "category": "null-safety",
+      "description": "The component destructures `config.get('authorProfileImage')` without any null guard. If a client configuration doesn't include `authorProfileImage` (only AJA and AJE configs add it), this will throw `Cannot destructure property 'sizes' of undefined`.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    },
+    {
+      "file": "frontend/src/global/components/author-profile/author-profile-header/index.js",
+      "line": 74,
+      "severity": "suggestion",
+      "confidence": "medium",
+      "category": "api-contract",
+      "description": "PropTypes declares `avatars: PropTypes.oneOfType([PropTypes.array, PropTypes.object])` suggesting object format is supported, but `getAvatarUrlOfForcedSize` explicitly rejects non-array avatars and returns a placeholder. Either remove `PropTypes.object` from the type to make the contract honest, or handle the object format in the avatar helper.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    },
+    {
+      "file": "frontend/src/global/components/author-profile/author-profile-featured/index.js",
+      "line": 22,
+      "severity": "suggestion",
+      "confidence": "high",
+      "category": "ssr-hydration",
+      "description": "The component uses `useIsMobile()` which returns `false` during SSR but may return `true` on the client. This causes a hydration mismatch where the server renders a `carousel` layout but the client switches to `mobileGrid` after hydration, causing a visible layout shift.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    },
+    {
+      "file": "frontend/src/global/components/author-profile/author-profile-bio/index.js",
+      "line": 31,
+      "severity": "suggestion",
+      "confidence": "medium",
+      "category": "accessibility",
+      "description": "The section has both `aria-labelledby` and `aria-label`. When both are present, `aria-labelledby` takes precedence per WAI-ARIA spec, making `aria-label` redundant. This also applies to the contact and featured sections.",
+      "classification": "MEH",
+      "is_cross_file": false
+    },
+    {
+      "file": "frontend/src/global/components/author-profile/author-profile-tabs/index.js",
+      "line": 30,
+      "severity": "suggestion",
+      "confidence": "medium",
+      "category": "undefined-property",
+      "description": "PropTypes for `tabs` doesn't require `headingId`, so a custom tab without `headingId` would create `href='#undefined'`.",
+      "classification": "GOOD",
+      "is_cross_file": false
+    },
+    {
+      "file": "frontend/src/global/components/home-page/card-collection/collection-layout/index.js",
+      "line": 294,
+      "severity": "suggestion",
+      "confidence": "medium",
+      "category": "prop-spreading",
+      "description": "The `CarouselArticleCard` component now accepts `...props` and spreads them into `CardArticle`. Uncontrolled prop spreading can lead to unexpected behavior if callers accidentally pass props that conflict with the hardcoded defaults.",
+      "classification": "MEH",
+      "is_cross_file": false
+    },
+    {
+      "file": "frontend/src/global/shared/apollo-mocks/authorPosts.mocks.js",
+      "line": 15,
+      "severity": "suggestion",
+      "confidence": "high",
+      "category": "test-data-gap",
+      "description": "The `createGuestAuthor` mock helper doesn't include the `email` field. The mock data in tests won't reflect the real GraphQL response shape, potentially masking issues where `email` is expected but not present.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    },
+    {
+      "file": "frontend/src/global/pages/author-v2/index.js",
+      "line": 75,
+      "severity": "suggestion",
+      "confidence": "medium",
+      "category": "logic",
+      "description": "When `articles` is empty but `guestAuthor` exists, the page returns `<NotFound />`. This means an author who has a valid profile but zero published articles will show a 404 page instead of their profile.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    }
+  ],
+  "metadata": {
+    "model": "claude-opus-4-6[1m]",
+    "num_turns": 37,
+    "duration_ms": 302480,
+    "total_findings": 12,
+    "good_count": 10,
+    "meh_count": 2
+  }
+}

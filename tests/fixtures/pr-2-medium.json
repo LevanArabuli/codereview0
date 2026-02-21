@@ -1,0 +1,90 @@
+{
+  "pr": {
+    "url": "https://github.com/ALJAZEERAPLUS/ucms/pull/15007",
+    "title": "UCMS-20476: Fix Livestream tabs accessibility",
+    "size_category": "medium",
+    "files_changed": 18,
+    "additions": 565,
+    "deletions": 453
+  },
+  "expected_findings": [
+    {
+      "file": "frontend/src/global/components/tabs/tabsList/index.js",
+      "line": 124,
+      "severity": "suggestion",
+      "confidence": "high",
+      "category": "dead-code",
+      "description": "`containerRef` is created on line 124 and assigned to the wrapper `<div>` on line 217, but is never read or used anywhere else. It adds a ref allocation and DOM assignment for no purpose. Remove it unless there's a planned use.",
+      "classification": "GOOD",
+      "is_cross_file": false
+    },
+    {
+      "file": "frontend/src/global/components/tabs/tabsList/styles.scss",
+      "line": 9,
+      "severity": "suggestion",
+      "confidence": "high",
+      "category": "separation-of-concerns",
+      "description": "The generic `tabsList/styles.scss` contains `.live-stream-player .scroll-arrow` theater-mode dark gradient styles. This couples the reusable tabs component to a specific consumer. These overrides belong in `live-stream-widget/theater.styles.scss` where the other `.live-stream-player .live-stream-tabs` theater overrides already exist.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    },
+    {
+      "file": "frontend/src/global/components/tabs/tabsList/index.js",
+      "line": 174,
+      "severity": "suggestion",
+      "confidence": "medium",
+      "category": "accessibility",
+      "description": "When `variant='navigation'`, the ARIA semantics switch to a navigation pattern (no `role=\"tablist\"`, `aria-current` instead of `aria-selected`, all buttons with `tabIndex={0}`). However, the `handleTabKeyPress` keyboard handler still auto-activates tabs on arrow key press. In a navigation ARIA pattern, users expect Tab to move between items and Enter/Space to activate. Having arrow keys both move focus AND activate creates a hybrid that may confuse screen reader users.",
+      "classification": "GOOD",
+      "is_cross_file": false
+    },
+    {
+      "file": "frontend/src/global/hooks/useHorizontalScroll.js",
+      "line": 64,
+      "severity": "suggestion",
+      "confidence": "medium",
+      "category": "visual-jank",
+      "description": "`scrollToActive` sets `list.scrollLeft` directly (synchronous DOM write), but it runs inside `useEffect` which fires after the browser has painted. This can cause a visible flash where the active tab appears un-centered for one frame before jumping into position. Consider using `useLayoutEffect`.",
+      "classification": "GOOD",
+      "is_cross_file": false
+    },
+    {
+      "file": "frontend/src/global/hooks/useHorizontalScroll.js",
+      "line": 79,
+      "severity": "suggestion",
+      "confidence": "medium",
+      "category": "redundant-execution",
+      "description": "The hook's `useEffect` calls `scrollToActive()` on mount. Separately, `TabComponent` has its own `useEffect` that also calls `scrollToActive()` whenever `currentTabIndex` changes, including on mount. This results in `scrollToActive` running twice on initial render when `scrollable=true`.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    },
+    {
+      "file": "frontend/src/global/components/scroll-arrow/styles.scss",
+      "line": 18,
+      "severity": "suggestion",
+      "confidence": "medium",
+      "category": "rtl-support",
+      "description": "`padding-left: 10px` and `padding-right: 5px` use physical properties rather than logical properties (`padding-inline-start`/`padding-inline-end`). The project uses RTL extensively. Using logical properties would ensure consistent alignment relative to the content direction, matching the rest of the codebase's RTL conventions.",
+      "classification": "MEH",
+      "is_cross_file": false
+    },
+    {
+      "file": "frontend/src/global/components/tabs/tabsList/index.test.js",
+      "line": 1,
+      "severity": "suggestion",
+      "confidence": "high",
+      "category": "test-coverage",
+      "description": "Neither `tabsList/index.test.js` nor `tabsList/index.integration.test.js` include any tests for the new `variant='navigation'` or `scrollable` features. Key untested scenarios include: navigation variant ARIA output, scroll arrow rendering when `scrollable={true}`, and the `<nav>` wrapper with `ariaLabel`.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    }
+  ],
+  "metadata": {
+    "model": "claude-opus-4-6[1m]",
+    "num_turns": 26,
+    "duration_ms": 449392,
+    "total_findings": 7,
+    "good_count": 6,
+    "meh_count": 1
+  }
+}

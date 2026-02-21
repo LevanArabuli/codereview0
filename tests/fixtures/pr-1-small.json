@@ -1,0 +1,80 @@
+{
+  "pr": {
+    "url": "https://github.com/ALJAZEERAPLUS/ucms/pull/14980",
+    "title": "feat(UCMS-19735): Added function to set allow_google_signals from OneTrust cookie",
+    "size_category": "small",
+    "files_changed": 3,
+    "additions": 59,
+    "deletions": 21
+  },
+  "expected_findings": [
+    {
+      "file": "frontend/public/index_aja.html",
+      "line": 46,
+      "severity": "suggestion",
+      "confidence": "high",
+      "category": "duplication",
+      "description": "The `hasC0002FromOptanonCookie()` function is duplicated identically across all three modified files (index_aja.html, index_ajb.html, index_aje.html). If this logic ever needs to change (e.g., a different cookie format), all three files must be updated in lockstep. Consider extracting this into a shared inline script file (e.g., via `__webpack_inline`) or a utility included via the build process, consistent with how `analytics-setup.js` is already inlined.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    },
+    {
+      "file": "frontend/public/index_aja.html",
+      "line": 53,
+      "severity": "bug",
+      "confidence": "medium",
+      "category": "inconsistent-clients",
+      "description": "Three other client index files (`index_ajd.html`, `index_ajm.html`, `index_chinese.html`) still use the old code: they default `allow_google_signals` to `false`, use the loose regex `/C0002/` (which could false-positive on e.g. `C00020`), lack null-safety on `window.OnetrustActiveGroups`, and don't read from the OptanonConsent cookie. This creates inconsistent consent behavior across clients. These files should receive the same updates.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    },
+    {
+      "file": "frontend/public/index_ajb.html",
+      "line": 134,
+      "severity": "suggestion",
+      "confidence": "high",
+      "category": "scope-creep",
+      "description": "This PR adds freestar ad personalization logic to AJB's `OptanonWrapper` that wasn't there before. While it aligns AJB with AJA/AJE, this is a functional behavior change (ads personalization handling) that goes beyond the stated scope of setting `allow_google_signals` from cookies. This should be called out in the PR description so reviewers are aware of the additional behavior change for AJB users.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    },
+    {
+      "file": "frontend/public/index_ajb.html",
+      "line": 149,
+      "severity": "suggestion",
+      "confidence": "high",
+      "category": "scope-creep",
+      "description": "The `ot-lib-ready` event dispatch is newly added to AJB's `OptanonWrapper`. The freestar component (`src/global/components/ads/freestar/index.js:62-64`) listens for this event and its comment says it's set on 'index_aja and index_aje' only. Adding it to AJB will now activate freestar ad geo-location logic for AJB. Verify this is intentional and update the comment in the freestar component.",
+      "classification": "GOOD",
+      "is_cross_file": true
+    },
+    {
+      "file": "frontend/public/index_aja.html",
+      "line": 53,
+      "severity": "security",
+      "confidence": "medium",
+      "category": "privacy-consent",
+      "description": "The previous behavior defaulted `allow_google_signals` to `false` and only enabled it after OneTrust explicitly confirmed consent via `OptanonWrapper`. The new behavior reads prior consent state from the `OptanonConsent` cookie at page load, which could enable Google Signals before the OneTrust SDK has loaded and validated the current consent status. If the cookie contains stale consent (e.g., user revoked consent on a different domain or the cookie hasn't been cleaned up), Google Signals may briefly fire without valid consent. Confirm this aligns with your privacy compliance requirements.",
+      "classification": "GOOD",
+      "is_cross_file": false
+    },
+    {
+      "file": "frontend/public/index_aje.html",
+      "line": 162,
+      "severity": "suggestion",
+      "confidence": "high",
+      "category": "file-format",
+      "description": "The trailing newline was removed from `index_aje.html`. POSIX convention and most linting tools expect files to end with a newline character. This can cause noisy diffs and warnings. Add a newline at the end of the file.",
+      "classification": "MEH",
+      "is_cross_file": false
+    }
+  ],
+  "metadata": {
+    "model": "claude-opus-4-6[1m]",
+    "num_turns": 21,
+    "duration_ms": 101330,
+    "total_findings": 6,
+    "good_count": 5,
+    "meh_count": 1
+  }
+}
