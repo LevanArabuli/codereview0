@@ -6,7 +6,7 @@ import type { PRData, PRFile } from './types.js';
  * Get a GitHub auth token from the gh CLI.
  * Requires gh to be installed and authenticated.
  */
-export function getGitHubToken(): string {
+function getGitHubToken(): string {
   const token = execFileSync('gh', ['auth', 'token'], {
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],

@@ -11,7 +11,7 @@ export interface EvalFinding {
 }
 
 /** A pairing of an expected finding to an actual finding (or null if unmatched) */
-export interface FindingMatch {
+interface FindingMatch {
   expected: EvalFinding;
   actual: ReviewFinding | null;
   distance: number; // -1 if unmatched
@@ -24,7 +24,7 @@ export interface MatchResult {
 }
 
 /** Precision, recall, and hallucination rate computed from match results */
-export interface EvalMetrics {
+interface EvalMetrics {
   precision: number;
   recall: number;
   hallucinationRate: number;

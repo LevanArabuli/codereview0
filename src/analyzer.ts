@@ -84,7 +84,7 @@ export interface AnalysisMeta {
 }
 
 /** Structured analysis result with findings and model identification */
-export interface AnalysisResult {
+interface AnalysisResult {
   findings: ReviewFinding[];
   model: string;
   meta?: AnalysisMeta;

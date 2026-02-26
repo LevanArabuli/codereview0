@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** Schema for a related code location referenced by a finding */
-export const RelatedLocationSchema = z.object({
+const RelatedLocationSchema = z.object({
   file: z.string(),
   line: z.number().int(),
   reason: z.string(),
@@ -25,12 +25,6 @@ export const ReviewResultSchema = z.object({
   findings: z.array(ReviewFindingSchema),
 });
 
-/** A related code location referenced by a finding */
-export type RelatedLocation = z.infer<typeof RelatedLocationSchema>;
-
 /** A single review finding with severity, confidence, and location */
 export type ReviewFinding = z.infer<typeof ReviewFindingSchema>;
-
-/** Complete review result containing all findings */
-export type ReviewResult = z.infer<typeof ReviewResultSchema>;
 
