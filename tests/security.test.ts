@@ -227,3 +227,118 @@ describe('CRED - Credential Safety', () => {
     });
   });
 });
+
+// ─── API: API Blast Radius ───────────────────────────────────────────────────
+
+describe('API - API Safety', () => {
+  it('github.ts only uses safe Octokit methods (pulls.get, pulls.listFiles, pulls.createReview)', () => {
+    const source = readFileSync(join(SRC_DIR, 'github.ts'), 'utf-8');
+
+    // Find all octokit method calls: octokit.pulls.X or octokit.rest.X
+    const octokitCalls = [...source.matchAll(/octokit\.(?:rest\.)?(\w+\.\w+)/g)];
+    const methodNames = octokitCalls.map(m => m[1]);
+
+    const allowedMethods = new Set(['pulls.get', 'pulls.listFiles', 'pulls.createReview']);
+    for (const method of methodNames) {
+      expect(allowedMethods.has(method)).toBe(true);
+    }
+
+    // Verify at least the 3 expected methods are present
+    expect(methodNames).toContain('pulls.get');
+    expect(methodNames).toContain('pulls.listFiles');
+    expect(methodNames).toContain('pulls.createReview');
+  });
+
+  it('github.ts, cloner.ts, and prerequisites.ts only invoke safe gh CLI subcommands', () => {
+    const filesToCheck = ['github.ts', 'cloner.ts', 'prerequisites.ts'];
+    const allowedSubcommands = new Set(['auth token', 'auth status', 'repo clone']);
+
+    for (const file of filesToCheck) {
+      const source = readFileSync(join(SRC_DIR, file), 'utf-8');
+
+      // Find gh CLI invocations: execFile/execFileSync with 'gh' as command
+      // Look for patterns like: execFile('gh', [...]) or execFileSync('gh', [...])
+      const ghInvocations = [...source.matchAll(/execFile(?:Sync)?\(\s*'gh'\s*,\s*\[([^\]]+)\]/g)];
+
+      for (const match of ghInvocations) {
+        const argsStr = match[1];
+        // Extract the first two string arguments to determine the subcommand
+        const args = [...argsStr.matchAll(/'([^']+)'/g)].map(m => m[1]);
+        const subcommand = args.slice(0, 2).join(' ');
+        expect(allowedSubcommands).toContain(subcommand);
+      }
+    }
+  });
+
+  it('createReview call does NOT pass an event parameter (stays PENDING)', () => {
+    const source = readFileSync(join(SRC_DIR, 'github.ts'), 'utf-8');
+
+    // Find the createReview call blocks and verify none contain 'event:'
+    // The createReview calls pass an object literal. Ensure no `event:` property.
+    const createReviewBlocks = source.split('createReview(');
+    // Skip the first split part (before the first createReview call)
+    for (let i = 1; i < createReviewBlocks.length; i++) {
+      const block = createReviewBlocks[i];
+      // Take content up to the closing of the object (within reasonable bounds)
+      const objectContent = block.slice(0, 500);
+      expect(objectContent).not.toMatch(/\bevent\s*:/);
+    }
+  });
+
+  it('agentic prompt contains security guardrails blocking destructive operations', () => {
+    const source = readFileSync(join(SRC_DIR, 'prompt.ts'), 'utf-8');
+
+    // Verify the prompt contains explicit NEVER rules for destructive operations
+    expect(source).toContain('NEVER');
+    expect(source).toMatch(/push/i);
+    expect(source).toMatch(/merge/i);
+    expect(source).toMatch(/delete/i);
+    expect(source).toMatch(/close/i);
+    expect(source).toMatch(/approve/i);
+  });
+
+  it('SECURITY.md exists and contains Accepted Risks section', () => {
+    const projectRoot = resolve(import.meta.dirname, '..');
+    const securityMd = readFileSync(join(projectRoot, 'SECURITY.md'), 'utf-8');
+
+    expect(securityMd).toContain('Accepted Risk');
+  });
+});
+
+// ─── CLN: Cleanup ────────────────────────────────────────────────────────────
+
+describe('CLN - Cleanup', () => {
+  it('cli.ts registers a SIGINT handler', () => {
+    const source = readFileSync(join(SRC_DIR, 'cli.ts'), 'utf-8');
+    expect(source).toMatch(/process\.on\(\s*'SIGINT'/);
+  });
+
+  it('cli.ts has try/finally safety net for clone cleanup', () => {
+    const source = readFileSync(join(SRC_DIR, 'cli.ts'), 'utf-8');
+
+    // Verify activeClonePath tracking exists
+    expect(source).toContain('activeClonePath');
+
+    // Verify rmSync is used in cleanup paths
+    expect(source).toContain('rmSync');
+
+    // Verify try/finally blocks exist
+    expect(source).toContain('try');
+    expect(source).toContain('finally');
+  });
+
+  it('cloner.ts removes git remote origin after clone', () => {
+    const source = readFileSync(join(SRC_DIR, 'cloner.ts'), 'utf-8');
+    expect(source).toContain('remote');
+    expect(source).toContain('remove');
+    expect(source).toContain('origin');
+
+    // Verify the exact git command pattern
+    expect(source).toMatch(/git.*remote.*remove.*origin/s);
+  });
+
+  it('cloner.ts creates clone directories with 0o700 permissions', () => {
+    const source = readFileSync(join(SRC_DIR, 'cloner.ts'), 'utf-8');
+    expect(source).toContain('0o700');
+  });
+});
