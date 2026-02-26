@@ -10,8 +10,22 @@ import { cloneRepo, getClonePath, promptCleanup } from './cloner.js';
 import { parseDiffHunks } from './diff-parser.js';
 import { partitionFindings, buildReviewBody } from './review-builder.js';
 import { formatInlineComment } from './formatter.js';
-import { EXIT_PREREQ, EXIT_INVALID_URL, EXIT_API_ERROR, EXIT_ANALYSIS_ERROR } from './errors.js';
+import { EXIT_PREREQ, EXIT_INVALID_URL, EXIT_API_ERROR, EXIT_ANALYSIS_ERROR, sanitizeError } from './errors.js';
 import { generateHtmlReport, openInBrowser } from './html-report.js';
+import { rmSync, existsSync } from 'node:fs';
+
+/** Track active clone path for cleanup on error/SIGINT */
+let activeClonePath: string | null = null;
+
+/** Best-effort cleanup of active clone directory */
+function cleanupOnExit(): void {
+  if (activeClonePath) {
+    try { rmSync(activeClonePath, { recursive: true, force: true }); } catch { /* best-effort */ }
+    activeClonePath = null;
+  }
+}
+
+process.on('SIGINT', () => { cleanupOnExit(); process.exit(130); });
 
 const program = new Command();
 
@@ -58,9 +72,7 @@ program
     } catch (error: unknown) {
       console.log(); // newline after progress message
       console.error(pc.red('\u2716 Failed to fetch PR data'));
-      if (error instanceof Error && error.message) {
-        console.error(pc.dim('  ' + error.message));
-      }
+      console.error(pc.dim('  ' + sanitizeError(error)));
       process.exit(EXIT_API_ERROR);
     }
     const fetchDuration = performance.now() - fetchStart;
@@ -83,6 +95,8 @@ program
       // 4a. Clone repository
       let cloneSucceeded = false;
       const clonePath = getClonePath(prData.headRepoName);
+      activeClonePath = clonePath;
+      try {
       const cloneStart = performance.now();
       try {
         printProgress('Cloning repository...');
@@ -92,9 +106,7 @@ program
       } catch (error: unknown) {
         console.log(); // newline after progress message
         console.error(pc.yellow('Warning: Could not clone repo -- falling back to quick review'));
-        if (error instanceof Error && error.message) {
-          console.error(pc.dim('  ' + error.message));
-        }
+        console.error(pc.dim('  ' + sanitizeError(error)));
       }
       const cloneDuration = performance.now() - cloneStart;
       if (options.verbose) {
@@ -134,9 +146,7 @@ program
         } catch (error: unknown) {
           console.log(); // newline after progress message
           console.error(pc.red('Analysis failed'));
-          if (error instanceof Error && error.message) {
-            console.error(error.message);
-          }
+          console.error(sanitizeError(error));
           process.exit(EXIT_ANALYSIS_ERROR);
         }
       }
@@ -198,9 +208,7 @@ program
         } catch (error: unknown) {
           console.log(); // newline after progress message
           console.error(pc.yellow('\u26A0 Failed to post review to GitHub'));
-          if (error instanceof Error && error.message) {
-            console.error(pc.dim('  ' + error.message));
-          }
+          console.error(pc.dim('  ' + sanitizeError(error)));
         }
       }
 
@@ -211,6 +219,13 @@ program
         } catch {
           // Cleanup failure should never crash the tool
         }
+      }
+      } finally {
+        // Safety net: clean up clone directory on any error path that bypasses promptCleanup
+        if (activeClonePath && existsSync(activeClonePath)) {
+          try { rmSync(activeClonePath, { recursive: true, force: true }); } catch { /* best-effort */ }
+        }
+        activeClonePath = null;
       }
     } else {
       // Quick mode (default): analyze diff only
@@ -235,9 +250,7 @@ program
       } catch (error: unknown) {
         console.log(); // newline after progress message
         console.error(pc.red('Analysis failed'));
-        if (error instanceof Error && error.message) {
-          console.error(error.message);
-        }
+        console.error(sanitizeError(error));
         process.exit(EXIT_ANALYSIS_ERROR);
       }
 
@@ -298,9 +311,7 @@ program
         } catch (error: unknown) {
           console.log(); // newline after progress message
           console.error(pc.yellow('\u26A0 Failed to post review to GitHub'));
-          if (error instanceof Error && error.message) {
-            console.error(pc.dim('  ' + error.message));
-          }
+          console.error(pc.dim('  ' + sanitizeError(error)));
         }
       }
     }

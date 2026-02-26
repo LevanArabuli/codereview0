@@ -1,4 +1,4 @@
-import { execFile as execFileCb } from 'node:child_process';
+import { execFile as execFileCb, execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { access, rm } from 'node:fs/promises';
 import * as path from 'node:path';
@@ -115,6 +115,12 @@ export async function cloneRepo(
   p.child.stdin?.end();
 
   await p;
+
+  // Structural push prevention: remove git remote so Claude has nowhere to push
+  // even if it tries. Non-fatal since this is defense-in-depth.
+  try {
+    execFileSync('git', ['remote', 'remove', 'origin'], { cwd: targetDir });
+  } catch { /* non-fatal: defense-in-depth */ }
 }
 
 /**
