@@ -104,6 +104,46 @@ function extractModelId(wrapper: ClaudeResponse, fallbackModel?: string): string
 }
 
 /**
+ * Parse the Claude CLI result text and extract validated findings.
+ * Handles direct JSON parsing with fallback to regex extraction from text.
+ * Validates against the ReviewResultSchema using Zod.
+ */
+function parseClaudeResponse(resultText: string): ReviewFinding[] {
+  let data: unknown;
+  try {
+    data = JSON.parse(resultText);
+  } catch {
+    const match = resultText.match(/\{[\s\S]*"findings"[\s\S]*\}/);
+    if (match) {
+      data = JSON.parse(match[0]);
+    } else {
+      throw new Error('Could not find JSON in Claude response');
+    }
+  }
+
+  const parsed = ReviewResultSchema.safeParse(data);
+  if (!parsed.success) {
+    throw new Error(`Response validation failed: ${parsed.error.message}`);
+  }
+
+  return parsed.data.findings;
+}
+
+/**
+ * Construct AnalysisMeta from the Claude CLI response wrapper.
+ * Uses defensive defaults (nullish coalescing) for all fields.
+ */
+function buildMeta(wrapper: ClaudeResponse): AnalysisMeta {
+  return {
+    cost_usd: wrapper.total_cost_usd ?? wrapper.cost_usd ?? 0,
+    duration_ms: wrapper.duration_ms ?? 0,
+    num_turns: wrapper.num_turns ?? 0,
+    duration_api_ms: wrapper.duration_api_ms ?? 0,
+    session_id: wrapper.session_id ?? '',
+  };
+}
+
+/**
  * Analyze a PR diff using Claude CLI and return structured review findings.
  *
  * Invokes `claude -p` as a subprocess with JSON output format and
@@ -149,36 +189,11 @@ export async function analyzeDiff(prData: PRData, model?: string, mode?: ReviewM
         );
       }
 
-      // Parse result: try direct JSON parse, then extract JSON from text
-      let data: unknown;
-      try {
-        data = JSON.parse(wrapper.result);
-      } catch {
-        // Result may contain text around JSON — extract the JSON object
-        const match = wrapper.result.match(/\{[\s\S]*"findings"[\s\S]*\}/);
-        if (match) {
-          data = JSON.parse(match[0]);
-        } else {
-          throw new Error("Could not find JSON in Claude response");
-        }
-      }
-
-      // Validate against Zod schema
-      const parsed = ReviewResultSchema.safeParse(data);
-      if (!parsed.success) {
-        throw new Error(`Response validation failed: ${parsed.error.message}`);
-      }
-
+      const findings = parseClaudeResponse(wrapper.result);
       return {
-        findings: parsed.data.findings,
+        findings,
         model: extractModelId(wrapper, model),
-        meta: {
-          cost_usd: wrapper.total_cost_usd ?? wrapper.cost_usd ?? 0,
-          duration_ms: wrapper.duration_ms ?? 0,
-          num_turns: wrapper.num_turns ?? 0,
-          duration_api_ms: wrapper.duration_api_ms ?? 0,
-          session_id: wrapper.session_id ?? '',
-        },
+        meta: buildMeta(wrapper),
       };
     } catch (error: unknown) {
       // Check for timeout (execFile sets killed=true when process is killed due to timeout)
@@ -327,35 +342,11 @@ export async function analyzeAgentic(
           throw new Error(wrapper.result ?? 'unknown error');
         }
 
-        // Double parse: result field contains the findings JSON string
-        let data: unknown;
-        try {
-          data = JSON.parse(wrapper.result);
-        } catch {
-          const match = wrapper.result.match(/\{[\s\S]*"findings"[\s\S]*\}/);
-          if (match) {
-            data = JSON.parse(match[0]);
-          } else {
-            throw new Error('could not find JSON in response');
-          }
-        }
-
-        // Validate against Zod schema
-        const parsed = ReviewResultSchema.safeParse(data);
-        if (!parsed.success) {
-          throw new Error(`response validation failed: ${parsed.error.message}`);
-        }
-
+        const findings = parseClaudeResponse(wrapper.result);
         resolve({
-          findings: parsed.data.findings,
+          findings,
           model: extractModelId(wrapper, model),
-          meta: {
-            cost_usd: wrapper.total_cost_usd ?? wrapper.cost_usd ?? 0,
-            duration_ms: wrapper.duration_ms ?? 0,
-            num_turns: wrapper.num_turns ?? 0,
-            duration_api_ms: wrapper.duration_api_ms ?? 0,
-            session_id: wrapper.session_id ?? '',
-          },
+          meta: buildMeta(wrapper),
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
