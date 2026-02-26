@@ -10,6 +10,33 @@ const execFile = promisify(execFileCb);
 const CLONE_TIMEOUT_MS = 300_000;
 
 /**
+ * Validate a value from GitHub API is safe for use as a subprocess argument.
+ * Rejects values with dangerous patterns: leading dash (git flag injection),
+ * path traversal (..), null bytes.
+ * Does NOT restrict valid GitHub characters (dots, slashes, hyphens allowed).
+ */
+export function validateGitArg(value: string, label: string): void {
+  if (!value) {
+    throw new Error(`Error: ${label} is empty. Aborting review.`);
+  }
+  if (value.startsWith('-')) {
+    throw new Error(
+      `Error: ${label} '${value}' starts with a dash -- contains dangerous characters. Aborting review.`,
+    );
+  }
+  if (value.includes('..')) {
+    throw new Error(
+      `Error: ${label} '${value}' contains path traversal sequence. Aborting review.`,
+    );
+  }
+  if (value.includes('\0')) {
+    throw new Error(
+      `Error: ${label} contains null byte. Aborting review.`,
+    );
+  }
+}
+
+/**
  * Get the local clone path for a repository.
  * Clones go into `.codereview/<repoName>` under the current working directory.
  */
@@ -32,6 +59,11 @@ export async function cloneRepo(
   headBranch: string,
   targetDir: string,
 ): Promise<void> {
+  // Validate all GitHub API inputs before any subprocess call
+  validateGitArg(headRepoOwner, 'Repository owner');
+  validateGitArg(headRepoName, 'Repository name');
+  validateGitArg(headBranch, 'Branch name');
+
   // Remove existing clone directory if present
   try {
     await access(targetDir);
