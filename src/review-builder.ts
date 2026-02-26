@@ -1,6 +1,7 @@
 import type { DiffHunk } from './types.js';
 import type { ReviewFinding } from './schemas.js';
 import { isLineInDiff } from './diff-parser.js';
+import { capitalizeSeverity } from './formatter.js';
 
 /**
  * Partition findings into inline (within diff hunks) and off-diff (outside hunks).
@@ -41,7 +42,7 @@ export function buildReviewBody(offDiffFindings: ReviewFinding[]): string {
 
   let body = '**Findings outside the diff** (cannot be posted as inline comments):\n';
   for (const f of offDiffFindings) {
-    const severity = f.severity.charAt(0).toUpperCase() + f.severity.slice(1);
+    const severity = capitalizeSeverity(f.severity);
     body += `\n- **${severity}** \`[${f.confidence}]\` \`${f.file}:${f.line}\` -- ${f.description}`;
   }
 

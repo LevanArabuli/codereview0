@@ -15,6 +15,7 @@ import type { ParsedPR } from './types.js';
 import { parseDetailedDiff, type DiffFile, type DiffLine } from './html-diff-parser.js';
 import { parseDiffHunks } from './diff-parser.js';
 import { partitionFindings } from './review-builder.js';
+import { capitalizeSeverity } from './formatter.js';
 
 /**
  * Escape HTML special characters to prevent XSS.
@@ -76,20 +77,9 @@ function severityBadgeClass(severity: string): string {
   }
 }
 
-/** Get display label for severity */
-function severityLabel(severity: string): string {
-  switch (severity) {
-    case 'bug': return 'Bug';
-    case 'security': return 'Security';
-    case 'suggestion': return 'Suggestion';
-    case 'nitpick': return 'Nitpick';
-    default: return severity;
-  }
-}
-
 /** Render a severity badge HTML element */
 function renderSeverityBadge(severity: string): string {
-  return `<span class="severity-badge ${severityBadgeClass(severity)}">${escapeHtml(severityLabel(severity))}</span>`;
+  return `<span class="severity-badge ${severityBadgeClass(severity)}">${escapeHtml(capitalizeSeverity(severity))}</span>`;
 }
 
 /** Render a single finding annotation block */
@@ -139,7 +129,7 @@ function renderSeverityBreakdown(findings: ReviewFinding[]): string {
   for (const sev of severities) {
     const count = counts[sev];
     if (count && count > 0) {
-      parts.push(`<span class="severity-count ${severityBadgeClass(sev)}">${count} ${severityLabel(sev)}${count === 1 ? '' : sev === 'security' ? '' : 's'}</span>`);
+      parts.push(`<span class="severity-count ${severityBadgeClass(sev)}">${count} ${capitalizeSeverity(sev)}${count === 1 ? '' : sev === 'security' ? '' : 's'}</span>`);
     }
   }
   return parts.length > 0 ? parts.join(' ') : '<span class="no-findings">No findings</span>';

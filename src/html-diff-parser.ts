@@ -7,6 +7,8 @@
  * inline diff views in HTML reports.
  */
 
+import { FILE_HEADER_RE, HUNK_HEADER_RE } from './diff-parser.js';
+
 export interface DiffLine {
   type: 'context' | 'addition' | 'deletion' | 'hunk-header';
   oldLineNum: number | null;
@@ -20,12 +22,6 @@ export interface DiffFile {
   status: 'added' | 'deleted' | 'modified' | 'renamed';
   lines: DiffLine[];
 }
-
-/** Matches a diff file header: diff --git a/path b/path */
-const FILE_HEADER_RE = /^diff --git a\/.+ b\/(.+)$/;
-
-/** Matches a hunk header: @@ -oldStart[,oldCount] +newStart[,newCount] @@ ... */
-const HUNK_HEADER_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 
 /**
  * Parse a unified diff string into structured per-file, per-line data.

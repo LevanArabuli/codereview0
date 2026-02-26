@@ -1,10 +1,10 @@
 import type { DiffHunk } from './types.js';
 
 /** Matches a diff file header: diff --git a/path b/path */
-const FILE_HEADER_RE = /^diff --git a\/.+ b\/(.+)$/;
+export const FILE_HEADER_RE = /^diff --git a\/.+ b\/(.+)$/;
 
 /** Matches a hunk header: @@ -oldStart[,oldCount] +newStart[,newCount] @@ */
-const HUNK_HEADER_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+export const HUNK_HEADER_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 
 /**
  * Parse a unified diff string and return a Map from filename to array of DiffHunk.

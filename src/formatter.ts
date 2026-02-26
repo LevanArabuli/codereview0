@@ -1,6 +1,14 @@
 import type { ReviewFinding } from './schemas.js';
 
 /**
+ * Capitalize a severity string for display (e.g., 'bug' -> 'Bug').
+ * Works for any string input, not just known severities.
+ */
+export function capitalizeSeverity(severity: string): string {
+  return severity.charAt(0).toUpperCase() + severity.slice(1);
+}
+
+/**
  * Format a finding as a GitHub inline comment body.
  *
  * Structure:
@@ -11,7 +19,7 @@ import type { ReviewFinding } from './schemas.js';
  *   (optional suggestion block)
  */
 export function formatInlineComment(finding: ReviewFinding): string {
-  const severity = finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1);
+  const severity = capitalizeSeverity(finding.severity);
   let body = `**${severity}** \`[${finding.confidence}]\`\n\n${finding.description}`;
 
   // Append related locations if present
