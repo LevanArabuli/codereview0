@@ -4,14 +4,14 @@ import type { PRData } from '../src/types.js';
 import type { ReviewFinding } from '../src/schemas.js';
 import type { ParsedPR } from '../src/types.js';
 import { writeFileSync } from 'node:fs';
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 
 vi.mock('node:fs', () => ({
   writeFileSync: vi.fn(),
 }));
 
 vi.mock('node:child_process', () => ({
-  exec: vi.fn(),
+  execFile: vi.fn(),
 }));
 
 function makePRData(overrides?: Partial<PRData>): PRData {
@@ -281,11 +281,11 @@ describe('generateHtmlReport', () => {
 
 describe('openInBrowser', () => {
   beforeEach(() => {
-    vi.mocked(exec).mockClear();
+    vi.mocked(execFile).mockClear();
   });
 
-  it('calls exec with a command', () => {
+  it('calls execFile with platform-specific args (no shell injection)', () => {
     openInBrowser('test.html');
-    expect(exec).toHaveBeenCalledTimes(1);
+    expect(execFile).toHaveBeenCalledTimes(1);
   });
 });

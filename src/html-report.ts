@@ -8,7 +8,7 @@
 
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import type { PRData } from './types.js';
 import type { ReviewFinding } from './schemas.js';
 import type { ParsedPR } from './types.js';
@@ -35,21 +35,18 @@ export function escapeHtml(str: string): string {
  */
 export function openInBrowser(filePath: string): void {
   const absPath = resolve(filePath);
-  let command: string;
 
   switch (process.platform) {
     case 'darwin':
-      command = `open "${absPath}"`;
+      execFile('open', [absPath], () => {});
       break;
     case 'win32':
-      command = `start "" "${absPath}"`;
+      execFile('cmd', ['/c', 'start', '', absPath], () => {});
       break;
     default:
-      command = `xdg-open "${absPath}"`;
+      execFile('xdg-open', [absPath], () => {});
       break;
   }
-
-  exec(command, { stdio: ['ignore', 'ignore', 'ignore'] } as never, () => {});
 }
 
 /**
