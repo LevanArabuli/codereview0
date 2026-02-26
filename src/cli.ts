@@ -13,6 +13,8 @@ import { formatInlineComment } from './formatter.js';
 import { EXIT_PREREQ, EXIT_INVALID_URL, EXIT_API_ERROR, EXIT_ANALYSIS_ERROR, sanitizeError } from './errors.js';
 import { generateHtmlReport, openInBrowser } from './html-report.js';
 import { rmSync, existsSync } from 'node:fs';
+import type { PRData, ParsedPR } from './types.js';
+import type { ReviewFinding } from './schemas.js';
 
 /** Track active clone path for cleanup on error/SIGINT */
 let activeClonePath: string | null = null;
@@ -26,6 +28,79 @@ function cleanupOnExit(): void {
 }
 
 process.on('SIGINT', () => { cleanupOnExit(); process.exit(130); });
+
+/**
+ * Shared post-analysis flow: terminal output, HTML report, verbose counts, GitHub review posting.
+ * Called from both deep and quick mode branches after findings are obtained.
+ */
+async function handlePostAnalysis(
+  findings: ReviewFinding[],
+  prData: PRData,
+  parsed: ParsedPR,
+  octokit: ReturnType<typeof createOctokit>,
+  options: { verbose?: boolean; post?: boolean; html?: boolean },
+): Promise<void> {
+  // Terminal output (always shown)
+  printAnalysisSummary(findings);
+  printFindings(findings);
+
+  // Generate HTML report (if requested)
+  if (options.html) {
+    const reportFile = generateHtmlReport(prData, findings, parsed);
+    openInBrowser(reportFile);
+  }
+
+  // Finding counts debug
+  if (options.verbose) {
+    if (options.post) {
+      const diffHunks = parseDiffHunks(prData.diff);
+      const { inline, offDiff } = partitionFindings(findings, diffHunks);
+      const posted = inline.length + (offDiff.length > 0 ? 1 : 0);
+      printDebug(`Findings: ${findings.length} raw, ${posted} posted`);
+    } else {
+      printDebug(`Findings: ${findings.length} raw`);
+    }
+  }
+
+  // Post review to GitHub (only with --post and non-zero findings)
+  if (options.post && findings.length > 0) {
+    try {
+      const postStart = performance.now();
+      printProgress('Posting review to GitHub...');
+
+      const diffHunks = parseDiffHunks(prData.diff);
+      const { inline, offDiff } = partitionFindings(findings, diffHunks);
+      const reviewBody = buildReviewBody(offDiff);
+      const comments = inline.map((f) => ({
+        path: f.file,
+        line: f.line,
+        side: 'RIGHT' as const,
+        body: formatInlineComment(f),
+      }));
+
+      const reviewUrl = await postReview(
+        octokit,
+        parsed.owner,
+        parsed.repo,
+        parsed.prNumber,
+        prData.headSha,
+        reviewBody,
+        comments,
+      );
+
+      printProgressDone();
+      console.log(pc.dim('Review URL: ') + reviewUrl);
+      const postDuration = performance.now() - postStart;
+      if (options.verbose) {
+        printDebug(`Post: ${formatDuration(postDuration)}`);
+      }
+    } catch (error: unknown) {
+      console.log(); // newline after progress message
+      console.error(pc.yellow('\u26A0 Failed to post review to GitHub'));
+      console.error(pc.dim('  ' + sanitizeError(error)));
+    }
+  }
+}
 
 const program = new Command();
 
@@ -151,68 +226,10 @@ program
         }
       }
 
-      // 5. Terminal output (always shown)
-      printAnalysisSummary(findings);
-      printFindings(findings);
+      // 5. Shared post-analysis: terminal output, HTML report, verbose counts, GitHub post
+      await handlePostAnalysis(findings, prData, parsed, octokit, options);
 
-      // Generate HTML report (if requested)
-      if (options.html) {
-        const reportFile = generateHtmlReport(prData, findings, parsed);
-        openInBrowser(reportFile);
-      }
-
-      // 6. Finding counts debug
-      if (options.verbose) {
-        if (options.post) {
-          const diffHunks = parseDiffHunks(prData.diff);
-          const { inline, offDiff } = partitionFindings(findings, diffHunks);
-          const posted = inline.length + (offDiff.length > 0 ? 1 : 0);
-          printDebug(`Findings: ${findings.length} raw, ${posted} posted`);
-        } else {
-          printDebug(`Findings: ${findings.length} raw`);
-        }
-      }
-
-      // 7. Post review to GitHub (only with --post and non-zero findings)
-      if (options.post && findings.length > 0) {
-        try {
-          const postStart = performance.now();
-          printProgress('Posting review to GitHub...');
-
-          const diffHunks = parseDiffHunks(prData.diff);
-          const { inline, offDiff } = partitionFindings(findings, diffHunks);
-          const reviewBody = buildReviewBody(offDiff);
-          const comments = inline.map((f) => ({
-            path: f.file,
-            line: f.line,
-            side: 'RIGHT' as const,
-            body: formatInlineComment(f),
-          }));
-
-          const reviewUrl = await postReview(
-            octokit,
-            parsed.owner,
-            parsed.repo,
-            parsed.prNumber,
-            prData.headSha,
-            reviewBody,
-            comments,
-          );
-
-          printProgressDone();
-          console.log(pc.dim('Review URL: ') + reviewUrl);
-          const postDuration = performance.now() - postStart;
-          if (options.verbose) {
-            printDebug(`Post: ${formatDuration(postDuration)}`);
-          }
-        } catch (error: unknown) {
-          console.log(); // newline after progress message
-          console.error(pc.yellow('\u26A0 Failed to post review to GitHub'));
-          console.error(pc.dim('  ' + sanitizeError(error)));
-        }
-      }
-
-      // 8. Cleanup cloned repo (only if clone succeeded)
+      // 6. Cleanup cloned repo (only if clone succeeded)
       if (cloneSucceeded) {
         try {
           await promptCleanup(clonePath);
@@ -254,66 +271,8 @@ program
         process.exit(EXIT_ANALYSIS_ERROR);
       }
 
-      // 5. Terminal output (always shown)
-      printAnalysisSummary(findings);
-      printFindings(findings);
-
-      // Generate HTML report (if requested)
-      if (options.html) {
-        const reportFile = generateHtmlReport(prData, findings, parsed);
-        openInBrowser(reportFile);
-      }
-
-      // 6. Finding counts debug
-      if (options.verbose) {
-        if (options.post) {
-          const diffHunks = parseDiffHunks(prData.diff);
-          const { inline, offDiff } = partitionFindings(findings, diffHunks);
-          const posted = inline.length + (offDiff.length > 0 ? 1 : 0);
-          printDebug(`Findings: ${findings.length} raw, ${posted} posted`);
-        } else {
-          printDebug(`Findings: ${findings.length} raw`);
-        }
-      }
-
-      // 7. Post review to GitHub (only with --post and non-zero findings)
-      if (options.post && findings.length > 0) {
-        try {
-          const postStart = performance.now();
-          printProgress('Posting review to GitHub...');
-
-          const diffHunks = parseDiffHunks(prData.diff);
-          const { inline, offDiff } = partitionFindings(findings, diffHunks);
-          const reviewBody = buildReviewBody(offDiff);
-          const comments = inline.map((f) => ({
-            path: f.file,
-            line: f.line,
-            side: 'RIGHT' as const,
-            body: formatInlineComment(f),
-          }));
-
-          const reviewUrl = await postReview(
-            octokit,
-            parsed.owner,
-            parsed.repo,
-            parsed.prNumber,
-            prData.headSha,
-            reviewBody,
-            comments,
-          );
-
-          printProgressDone();
-          console.log(pc.dim('Review URL: ') + reviewUrl);
-          const postDuration = performance.now() - postStart;
-          if (options.verbose) {
-            printDebug(`Post: ${formatDuration(postDuration)}`);
-          }
-        } catch (error: unknown) {
-          console.log(); // newline after progress message
-          console.error(pc.yellow('\u26A0 Failed to post review to GitHub'));
-          console.error(pc.dim('  ' + sanitizeError(error)));
-        }
-      }
+      // 5. Shared post-analysis: terminal output, HTML report, verbose counts, GitHub post
+      await handlePostAnalysis(findings, prData, parsed, octokit, options);
     }
   });
 
