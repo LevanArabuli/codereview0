@@ -4,6 +4,7 @@ import { ReviewResultSchema } from "./schemas.js";
 import { buildPrompt, buildAgenticPrompt, type ReviewMode } from "./prompt.js";
 import type { PRData } from "./types.js";
 import type { ReviewFinding } from "./schemas.js";
+import { scrubSecrets } from "./errors.js";
 
 const execFile = promisify(execFileCb);
 
@@ -23,6 +24,40 @@ const AGENTIC_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Max agentic turns -- safety net to prevent infinite loops (user decision: 50-100 range, midpoint) */
 const MAX_AGENTIC_TURNS = 75;
+
+/** Env var prefixes to strip from Claude CLI subprocess (blocklist approach, SUB-02) */
+const DANGEROUS_PREFIXES = [
+  'AWS_', 'AZURE_', 'GCP_', 'GOOGLE_',
+  'DATABASE_', 'REDIS_', 'MONGO_',
+  'SECRET_', 'PASSWORD_',
+  'CI_', 'JENKINS_', 'TRAVIS_', 'CIRCLE_',
+  'TOKEN_', 'KEY_',
+];
+
+/** Exact env var names to always strip */
+const DANGEROUS_EXACT = new Set(['DATABASE_URL', 'REDIS_URL']);
+
+/** Env vars to keep even if they match a dangerous prefix */
+const KEEP_LIST = new Set(['ANTHROPIC_API_KEY', 'GH_TOKEN', 'GITHUB_TOKEN']);
+
+/**
+ * Build a filtered copy of process.env for the Claude CLI subprocess.
+ * Strips known-dangerous env vars (cloud credentials, DB URLs, CI secrets)
+ * while keeping vars required for Claude CLI and GitHub operations.
+ */
+function filterEnv(): NodeJS.ProcessEnv {
+  const filtered: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (KEEP_LIST.has(key)) {
+      filtered[key] = value;
+      continue;
+    }
+    if (DANGEROUS_EXACT.has(key)) continue;
+    if (DANGEROUS_PREFIXES.some(prefix => key.startsWith(prefix))) continue;
+    filtered[key] = value;
+  }
+  return filtered;
+}
 
 /** Shape of the JSON wrapper returned by Claude CLI --output-format json */
 interface ClaudeResponse {
@@ -226,6 +261,7 @@ export async function analyzeAgentic(
     const child = spawn('claude', args, {
       cwd: clonePath,
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: filterEnv(),
     });
 
     child.stdin?.end();
@@ -241,7 +277,7 @@ export async function analyzeAgentic(
     child.stderr.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
       stderr += text;
-      process.stderr.write(chunk);
+      process.stderr.write(scrubSecrets(text));
     });
 
     // Manual timeout -- spawn does NOT support the timeout option
@@ -273,8 +309,8 @@ export async function analyzeAgentic(
       // Non-zero exit
       if (code !== 0) {
         if (verbose) {
-          console.error('\n[debug] Raw stdout:', stdout.slice(0, 2000));
-          console.error('[debug] Raw stderr:', stderr.slice(0, 2000));
+          console.error('\n[debug] Raw stdout:', scrubSecrets(stdout.slice(0, 2000)));
+          console.error('[debug] Raw stderr:', scrubSecrets(stderr.slice(0, 2000)));
         }
         const reason = stderr.includes('max turns')
           ? `max turns (${MAX_AGENTIC_TURNS}) reached without completing the review`
@@ -324,8 +360,8 @@ export async function analyzeAgentic(
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (verbose) {
-          console.error('\n[debug] Raw stdout:', stdout.slice(0, 2000));
-          console.error('[debug] Raw stderr:', stderr.slice(0, 2000));
+          console.error('\n[debug] Raw stdout:', scrubSecrets(stdout.slice(0, 2000)));
+          console.error('[debug] Raw stderr:', scrubSecrets(stderr.slice(0, 2000)));
         }
         reject(new Error(`Deep review failed: ${message}`));
       }
