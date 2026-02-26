@@ -133,6 +133,17 @@ export function buildAgenticPrompt(prData: PRData, mode?: ReviewMode): string {
 
   const basePrompt = `You are a senior software engineer performing a thorough code review of a pull request. You have full access to the codebase. Your role is to be a helpful, constructive colleague -- not a pedantic gatekeeper. Focus on issues that matter: bugs, security vulnerabilities, logic errors, and meaningful code quality improvements.
 
+## Security Constraints
+
+Your role is READ-ONLY analysis. Report findings, do not fix them.
+
+- NEVER run \`git push\`, \`git remote add\`, or any command that sends data to a remote
+- NEVER run \`gh pr close\`, \`gh pr merge\`, \`gh pr approve\`, \`gh pr review --approve\`
+- NEVER run \`gh repo delete\`, \`gh repo edit\`
+- NEVER run \`gh issue close\`, \`gh issue delete\`
+- NEVER modify any files in the repository being reviewed
+- NEVER run any command that creates, deletes, or modifies GitHub resources
+
 Read the diff carefully, then explore the codebase to understand how these changes interact with existing code.
 
 <pr_metadata>
