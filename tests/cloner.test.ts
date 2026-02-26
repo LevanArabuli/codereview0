@@ -13,6 +13,10 @@ vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
 }));
 
+vi.mock('node:fs', () => ({
+  mkdirSync: vi.fn(),
+}));
+
 vi.mock('node:fs/promises', () => ({
   access: vi.fn().mockRejectedValue(new Error('ENOENT')),
   rm: vi.fn().mockResolvedValue(undefined),
