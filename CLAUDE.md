@@ -24,7 +24,7 @@ All source lives in `src/`. 17 modules, single entry point:
 | `analyzer.ts` | Invokes Claude Code CLI as subprocess (`execFile`/`spawn`), parses JSON response, validates with Zod |
 | `cloner.ts` | Git clone via `gh repo clone` with security hardening (validation, 0o700 permissions, cleanup) |
 | `github.ts` | Octokit client -- fetches PR metadata, diff, file list; posts PENDING reviews |
-| `prompt.ts` | Constructs review prompts (quick/agentic modes, mode overlays like strict/detailed/lenient) |
+| `prompt.ts` | Constructs review prompts (quick/agentic modes, mode overlays like strict/detailed/lenient); defines ReviewMode type |
 | `output.ts` | Terminal output formatting, severity-sorted findings display with picocolors |
 | `review-builder.ts` | Builds GitHub review body from off-diff findings |
 | `html-report.ts` | Generates standalone HTML report with inline finding annotations |
@@ -32,7 +32,7 @@ All source lives in `src/`. 17 modules, single entry point:
 | `diff-parser.ts` | Line-in-diff validation for GitHub inline comments (is line N in the diff?) |
 | `formatter.ts` | Formats findings as GitHub comment markdown |
 | `schemas.ts` | Zod schemas for Claude CLI response validation |
-| `types.ts` | TypeScript type definitions (Finding, PRInfo, ReviewMode, etc.) |
+| `types.ts` | TypeScript type definitions (PRData, ParsedPR, DiffHunk, PRFile, PrereqFailure) |
 | `errors.ts` | Custom error classes (AnalysisError, CloneError, etc.) |
 | `eval.ts` | Evaluation infrastructure for fixture-based testing of review quality |
 | `url-parser.ts` | Parses GitHub PR URLs into owner/repo/number |
