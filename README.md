@@ -70,28 +70,5 @@ When using `--post`, the tool creates PENDING reviews on GitHub. You still need 
 
 ## Example Output
 
-```
-Add null safety to user service
-#42 johndoe feature/null-safety -> main
-+28 -3 2 files changed
+<img width="1727" height="1008" alt="Screenshot 2026-02-27 at 10 12 04" src="https://github.com/user-attachments/assets/e91bee0a-2241-43aa-aea0-4fdafa3fae63" />
 
-+15 -2 src/user-service.ts
-+13 -1 src/auth.ts
-
-✖ 1 bug · ◆ 2 suggestions · ○ 1 nitpick
-
-  ✖ bug src/user-service.ts:42 Missing null check before accessing user.email.
-    The user object can be undefined when the session expires, causing
-    a TypeError at runtime. Guard with an early return or optional chaining.
-
-  ◆ suggestion src/auth.ts:15 Consider using a constant for the token expiry.
-    The magic number 3600 appears in multiple places. Extract to a named
-    constant for clarity and easier maintenance.
-
-  ◆ suggestion src/user-service.ts:88 Duplicated validation logic.
-    This null-check pattern is repeated in three service methods. Extract
-    to a shared helper to reduce duplication.
-
-  ○ nitpick src/auth.ts:3 Unused import.
-    The 'crypto' import is not referenced in this file.
-```
