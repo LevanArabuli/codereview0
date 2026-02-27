@@ -11,6 +11,7 @@ git clone <repo-url>
 cd codereview
 npm install
 npm run build
+npm link
 ```
 
 ## Usage
