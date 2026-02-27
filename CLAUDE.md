@@ -1,6 +1,5 @@
 # CLAUDE.md
 
-@.planning/PROJECT.md
 @SECURITY.md
 
 ## Commands

@@ -1,6 +1,12 @@
 {
-  "name": "codereview",
+  "name": "codereview0",
+  "description": "AI-powered GitHub PR code review using Claude Code",
   "version": "0.1.0",
+  "author": "Levan Arabuli",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LevanArabuli/codereview0"
+  },
   "type": "module",
   "bin": {
     "codereview": "./dist/cli.js"
@@ -26,5 +32,6 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
-  }
+  },
+  "license": "MIT"
 }

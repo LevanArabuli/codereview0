@@ -13,10 +13,6 @@
 # testing
 /coverage
 
-# next.js
-/.next/
-/out/
-
 # production
 /build
 
@@ -34,9 +30,6 @@ yarn-error.log*
 .env*
 !.env.example
 
-# vercel
-.vercel
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
@@ -46,14 +39,3 @@ next-env.d.ts
 
 # playwright
 /test-results/
-/playwright-report/
-/blob-report/
-/playwright/.cache/
-
-# uploaded documents (user files, not versioned)
-/uploads/
-
-# drizzle (migrations are committed for CI/production reproducibility)
-# /drizzle/
-
-.trigger
