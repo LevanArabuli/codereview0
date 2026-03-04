@@ -279,6 +279,65 @@ describe('generateHtmlReport', () => {
   });
 });
 
+describe('confidence labels in HTML report', () => {
+  beforeEach(() => {
+    vi.mocked(writeFileSync).mockClear();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.mocked(console.log as ReturnType<typeof vi.fn>).mockRestore();
+  });
+
+  it('does NOT show confidence-badge for high confidence finding', () => {
+    const prData = makePRData();
+    const findings = [makeFinding({ confidence: 'high', line: 2 })];
+    const parsed = makeParsed();
+
+    generateHtmlReport(prData, findings, parsed);
+
+    const html = getWrittenHtml();
+    expect(html).not.toContain('confidence-badge');
+  });
+
+  it('shows confidence-badge span with medium for medium confidence finding', () => {
+    const prData = makePRData();
+    const findings = [makeFinding({ confidence: 'medium', line: 2 })];
+    const parsed = makeParsed();
+
+    generateHtmlReport(prData, findings, parsed);
+
+    const html = getWrittenHtml();
+    expect(html).toContain('confidence-badge');
+    expect(html).toContain('>medium</span>');
+  });
+
+  it('shows confidence-badge span with low for low confidence finding', () => {
+    const prData = makePRData();
+    const findings = [makeFinding({ confidence: 'low', line: 2 })];
+    const parsed = makeParsed();
+
+    generateHtmlReport(prData, findings, parsed);
+
+    const html = getWrittenHtml();
+    expect(html).toContain('confidence-badge');
+    expect(html).toContain('>low</span>');
+  });
+
+  it('shows confidence-badge for medium confidence off-diff finding', () => {
+    const prData = makePRData();
+    // Line 100 is off-diff
+    const findings = [makeFinding({ confidence: 'medium', line: 100 })];
+    const parsed = makeParsed();
+
+    generateHtmlReport(prData, findings, parsed);
+
+    const html = getWrittenHtml();
+    expect(html).toContain('confidence-badge');
+    expect(html).toContain('>medium</span>');
+  });
+});
+
 describe('openInBrowser', () => {
   beforeEach(() => {
     vi.mocked(execFile).mockClear();

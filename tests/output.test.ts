@@ -355,6 +355,68 @@ describe('printFindings', () => {
   });
 });
 
+describe('printFindings confidence labels', () => {
+  let logSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
+  it('does NOT show confidence label for high confidence bug', () => {
+    const findings: ReviewFinding[] = [
+      { file: 'src/foo.ts', line: 1, severity: 'bug', confidence: 'high', category: 'logic', description: 'Bad logic' },
+    ];
+
+    printFindings(findings);
+
+    const output = logSpy.mock.calls.map((c) => c[0] as string).join('\n');
+    expect(output).not.toContain('[high]');
+    expect(output).not.toContain('[medium]');
+    expect(output).not.toContain('[low]');
+  });
+
+  it('shows [medium] label for medium confidence suggestion', () => {
+    const findings: ReviewFinding[] = [
+      { file: 'src/foo.ts', line: 1, severity: 'suggestion', confidence: 'medium', category: 'quality', description: 'Consider refactoring' },
+    ];
+
+    printFindings(findings);
+
+    const output = logSpy.mock.calls.map((c) => c[0] as string).join('\n');
+    expect(output).toContain('[medium]');
+  });
+
+  it('shows [low] label for low confidence nitpick', () => {
+    const findings: ReviewFinding[] = [
+      { file: 'src/foo.ts', line: 1, severity: 'nitpick', confidence: 'low', category: 'style', description: 'Minor style issue' },
+    ];
+
+    printFindings(findings);
+
+    const output = logSpy.mock.calls.map((c) => c[0] as string).join('\n');
+    expect(output).toContain('[low]');
+  });
+
+  it('shows labels only on medium/low findings in mixed set', () => {
+    const findings: ReviewFinding[] = [
+      { file: 'a.ts', line: 1, severity: 'bug', confidence: 'high', category: 'logic', description: 'High conf bug' },
+      { file: 'b.ts', line: 2, severity: 'suggestion', confidence: 'medium', category: 'quality', description: 'Medium conf suggestion' },
+      { file: 'c.ts', line: 3, severity: 'nitpick', confidence: 'low', category: 'style', description: 'Low conf nitpick' },
+    ];
+
+    printFindings(findings);
+
+    const output = logSpy.mock.calls.map((c) => c[0] as string).join('\n');
+    expect(output).not.toContain('[high]');
+    expect(output).toContain('[medium]');
+    expect(output).toContain('[low]');
+  });
+});
+
 describe('extractHeadline', () => {
   it('splits on first sentence-ending punctuation followed by uppercase', () => {
     const result = extractHeadline('Missing null check. The user object may be null.');
