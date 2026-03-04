@@ -43,11 +43,11 @@ Plans:
   2. Quick mode fetches 3-5 related files (imports, tests, types) via the Octokit contents API and includes them in the review context
   3. A ReviewContext type exists in types.ts and serves as the shared data contract consumed by both quick and deep mode prompt construction
   4. Context gathering respects budget caps (file count and size limits) to prevent context overload
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md -- ReviewContext type, fetchFileContent, context discovery module (import parsing, naming patterns, fetching with budget enforcement)
+- [ ] 02-02-PLAN.md -- Prompt integration (related files in quick mode, structured exploration guidance in deep mode) and CLI pipeline wiring
 
 ### Phase 3: Prompt Foundations
 **Goal**: Prompt templates anchor the model's severity labels and suppress low-value findings through concrete examples
@@ -87,6 +87,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Output Filtering | 0/2 | Complete    | 2026-03-04 |
-| 2. Context Infrastructure | 0/0 | Not started | - |
+| 2. Context Infrastructure | 0/2 | Not started | - |
 | 3. Prompt Foundations | 0/0 | Not started | - |
 | 4. Context-Aware Review Pipeline | 0/0 | Not started | - |
