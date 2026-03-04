@@ -2,7 +2,7 @@ import { Command, Option } from 'commander';
 import pc from 'picocolors';
 import { parsePRUrl } from './url-parser.js';
 import { checkPrerequisites } from './prerequisites.js';
-import { createOctokit, fetchPRData, postReview } from './github.js';
+import { createOctokit, fetchPRData, postReview, fetchFileContent } from './github.js';
 import { printPRSummary, printErrors, printDebug, printModel, printMode, printMeta, formatDuration, estimateTokens, printProgress, printProgressDone, printAnalysisSummary, printFindings } from './output.js';
 import { buildPrompt, type ReviewMode } from './prompt.js';
 import { analyzeDiff, analyzeAgentic } from './analyzer.js';
@@ -13,8 +13,9 @@ import { formatInlineComment } from './formatter.js';
 import { EXIT_PREREQ, EXIT_INVALID_URL, EXIT_API_ERROR, EXIT_ANALYSIS_ERROR, sanitizeError } from './errors.js';
 import { generateHtmlReport, openInBrowser } from './html-report.js';
 import { deduplicateFindings } from './dedup.js';
+import { gatherQuickContext, buildExplorationGuidance } from './context.js';
 import { rmSync, existsSync } from 'node:fs';
-import type { PRData, ParsedPR } from './types.js';
+import type { PRData, ParsedPR, ReviewContext } from './types.js';
 import type { ReviewFinding } from './schemas.js';
 
 /** Track active clone path for cleanup on error/SIGINT */
@@ -173,6 +174,19 @@ program
     if (options.deep) {
       // Deep mode: clone -> agentic review (or fallback to quick if clone fails)
 
+      // Gather exploration guidance for deep mode (best-effort)
+      let deepContext: ReviewContext | undefined;
+      try {
+        deepContext = buildExplorationGuidance(prData.files);
+        if (options.verbose) {
+          printDebug(`Context: exploration guidance for ${deepContext.explorationGuidance?.length ?? 0} files`);
+        }
+      } catch (error: unknown) {
+        if (options.verbose) {
+          printDebug('Context gathering failed: ' + sanitizeError(error));
+        }
+      }
+
       // 4a. Clone repository
       let cloneSucceeded = false;
       const clonePath = getClonePath(prData.headRepoName);
@@ -198,7 +212,7 @@ program
         // 4b. Agentic review (single-pass deep analysis)
         console.log(pc.dim('Running deep review...'));
         const analyzeStart = performance.now();
-        const result = await analyzeAgentic(prData, clonePath, options.model, options.mode, options.verbose);
+        const result = await analyzeAgentic(prData, clonePath, options.model, options.mode, options.verbose, deepContext);
         const analyzeDuration = performance.now() - analyzeStart;
         findings = result.findings;
         printModel(result.model);
@@ -209,12 +223,34 @@ program
           }
         }
       } else {
-        // 4c. Fallback to quick review (clone failed)
-        const quickPrompt = buildPrompt(prData, options.mode);
+        // 4c. Fallback to quick review (clone failed) -- gather quick context
+        let fallbackContext: ReviewContext | undefined;
+        try {
+          const changedFileContents = new Map<string, string>();
+          await Promise.allSettled(
+            prData.files.map(async (f) => {
+              const content = await fetchFileContent(octokit, parsed.owner, parsed.repo, f.filename, prData.headSha);
+              if (content) changedFileContents.set(f.filename, content);
+            })
+          );
+          fallbackContext = await gatherQuickContext(octokit, parsed.owner, parsed.repo, prData.headSha, prData.files, changedFileContents);
+          if (options.verbose) {
+            const files = fallbackContext.relatedFiles ?? [];
+            const byReason = files.reduce((acc, f) => { acc[f.reason] = (acc[f.reason] ?? 0) + 1; return acc; }, {} as Record<string, number>);
+            const breakdown = Object.entries(byReason).map(([r, c]) => `${c} ${r}s`).join(', ');
+            printDebug(`Context: ${files.length} related files fetched${breakdown ? ` (${breakdown})` : ''}`);
+          }
+        } catch (error: unknown) {
+          if (options.verbose) {
+            printDebug('Context gathering failed: ' + sanitizeError(error));
+          }
+        }
+
+        const quickPrompt = buildPrompt(prData, options.mode, fallbackContext);
         const analyzeStart = performance.now();
         try {
           printProgress('Analyzing diff...');
-          const result = await analyzeDiff(prData, options.model, options.mode);
+          const result = await analyzeDiff(prData, options.model, options.mode, fallbackContext);
           printProgressDone();
           findings = result.findings;
 
@@ -253,12 +289,35 @@ program
     } else {
       // Quick mode (default): analyze diff only
 
+      // Gather quick-mode context (best-effort)
+      let quickContext: ReviewContext | undefined;
+      try {
+        const changedFileContents = new Map<string, string>();
+        await Promise.allSettled(
+          prData.files.map(async (f) => {
+            const content = await fetchFileContent(octokit, parsed.owner, parsed.repo, f.filename, prData.headSha);
+            if (content) changedFileContents.set(f.filename, content);
+          })
+        );
+        quickContext = await gatherQuickContext(octokit, parsed.owner, parsed.repo, prData.headSha, prData.files, changedFileContents);
+        if (options.verbose) {
+          const files = quickContext.relatedFiles ?? [];
+          const byReason = files.reduce((acc, f) => { acc[f.reason] = (acc[f.reason] ?? 0) + 1; return acc; }, {} as Record<string, number>);
+          const breakdown = Object.entries(byReason).map(([r, c]) => `${c} ${r}s`).join(', ');
+          printDebug(`Context: ${files.length} related files fetched${breakdown ? ` (${breakdown})` : ''}`);
+        }
+      } catch (error: unknown) {
+        if (options.verbose) {
+          printDebug('Context gathering failed: ' + sanitizeError(error));
+        }
+      }
+
       // 4. Analyze diff with progress and timing
-      const quickPrompt = buildPrompt(prData, options.mode);
+      const quickPrompt = buildPrompt(prData, options.mode, quickContext);
       const analyzeStart = performance.now();
       try {
         printProgress('Analyzing diff...');
-        const result = await analyzeDiff(prData, options.model, options.mode);
+        const result = await analyzeDiff(prData, options.model, options.mode, quickContext);
         printProgressDone();
         findings = result.findings;
 

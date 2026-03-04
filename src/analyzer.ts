@@ -2,7 +2,7 @@ import { execFile as execFileCb, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { ReviewResultSchema } from "./schemas.js";
 import { buildPrompt, buildAgenticPrompt, type ReviewMode } from "./prompt.js";
-import type { PRData } from "./types.js";
+import type { PRData, ReviewContext } from "./types.js";
 import type { ReviewFinding } from "./schemas.js";
 import { scrubSecrets } from "./errors.js";
 
@@ -150,8 +150,8 @@ function buildMeta(wrapper: ClaudeResponse): AnalysisMeta {
  * Zod-derived JSON Schema constraint. Implements double JSON parsing
  * (wrapper + result), Zod validation, retry-once logic, and 5-minute timeout.
  */
-export async function analyzeDiff(prData: PRData, model?: string, mode?: ReviewMode): Promise<AnalysisResult> {
-  const prompt = buildPrompt(prData, mode);
+export async function analyzeDiff(prData: PRData, model?: string, mode?: ReviewMode, context?: ReviewContext): Promise<AnalysisResult> {
+  const prompt = buildPrompt(prData, mode, context);
 
   let lastError: Error | undefined;
 
@@ -259,8 +259,9 @@ export async function analyzeAgentic(
   model?: string,
   mode?: ReviewMode,
   verbose?: boolean,
+  context?: ReviewContext,
 ): Promise<AnalysisResult> {
-  const prompt = buildAgenticPrompt(prData, mode);
+  const prompt = buildAgenticPrompt(prData, mode, context);
 
   const args = [
     '-p', prompt,
