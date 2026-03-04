@@ -229,13 +229,15 @@ export function printFindings(findings: ReviewFinding[]): void {
 
     if (f.severity === 'nitpick') {
       // Entire nitpick block rendered in dim
-      console.log(pc.dim(`  \u25CB nitpick ${location} ${headline}`));
+      const confLabel = f.confidence !== 'high' ? ` [${f.confidence}]` : '';
+      console.log(pc.dim(`  \u25CB nitpick${confLabel} ${location} ${headline}`));
       if (detail) {
         console.log(pc.dim(`    ${detail}`));
       }
     } else {
       const icon = SEVERITY_ICONS[f.severity] ?? f.severity;
-      console.log(`  ${icon} ${pc.dim(location)} ${headline}`);
+      const confLabel = f.confidence !== 'high' ? pc.dim(` [${f.confidence}]`) : '';
+      console.log(`  ${icon}${confLabel} ${pc.dim(location)} ${headline}`);
       if (detail) {
         console.log(`    ${detail}`);
       }

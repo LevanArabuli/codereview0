@@ -289,7 +289,7 @@ describe('confidence labels in HTML report', () => {
     vi.mocked(console.log as ReturnType<typeof vi.fn>).mockRestore();
   });
 
-  it('does NOT show confidence-badge for high confidence finding', () => {
+  it('does NOT show confidence-badge span for high confidence finding', () => {
     const prData = makePRData();
     const findings = [makeFinding({ confidence: 'high', line: 2 })];
     const parsed = makeParsed();
@@ -297,7 +297,8 @@ describe('confidence labels in HTML report', () => {
     generateHtmlReport(prData, findings, parsed);
 
     const html = getWrittenHtml();
-    expect(html).not.toContain('confidence-badge');
+    // The CSS class definition will contain 'confidence-badge', but no rendered span should
+    expect(html).not.toContain('<span class="confidence-badge">');
   });
 
   it('shows confidence-badge span with medium for medium confidence finding', () => {

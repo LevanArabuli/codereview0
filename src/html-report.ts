@@ -82,11 +82,18 @@ function renderSeverityBadge(severity: string): string {
   return `<span class="severity-badge ${severityBadgeClass(severity)}">${escapeHtml(capitalizeSeverity(severity))}</span>`;
 }
 
+/** Render a confidence badge for medium/low confidence findings (empty string for high) */
+function renderConfidenceBadge(confidence: string): string {
+  if (confidence === 'high') return '';
+  return ` <span class="confidence-badge">${escapeHtml(confidence)}</span>`;
+}
+
 /** Render a single finding annotation block */
 function renderAnnotation(finding: ReviewFinding): string {
   const borderClass = `annotation-${finding.severity === 'bug' || finding.severity === 'security' ? 'critical' : finding.severity === 'suggestion' ? 'suggestion' : 'nitpick'}`;
+  const confBadge = renderConfidenceBadge(finding.confidence);
   return `<div class="annotation ${borderClass}">
-  <div class="annotation-header">${renderSeverityBadge(finding.severity)} <span class="annotation-category">${escapeHtml(finding.category)}</span></div>
+  <div class="annotation-header">${renderSeverityBadge(finding.severity)}${confBadge} <span class="annotation-category">${escapeHtml(finding.category)}</span></div>
   <div class="annotation-body">${escapeHtml(finding.description)}</div>
 </div>`;
 }
@@ -167,8 +174,9 @@ function renderOffDiffSection(offDiff: ReviewFinding[]): string {
   if (offDiff.length === 0) return '';
   const items = offDiff.map(f => {
     const borderClass = `annotation-${f.severity === 'bug' || f.severity === 'security' ? 'critical' : f.severity === 'suggestion' ? 'suggestion' : 'nitpick'}`;
+    const confBadge = renderConfidenceBadge(f.confidence);
     return `<div class="annotation ${borderClass}">
-  <div class="annotation-header">${renderSeverityBadge(f.severity)} <span class="annotation-category">${escapeHtml(f.category)}</span></div>
+  <div class="annotation-header">${renderSeverityBadge(f.severity)}${confBadge} <span class="annotation-category">${escapeHtml(f.category)}</span></div>
   <div class="annotation-location">${escapeHtml(f.file)}:${f.line}</div>
   <div class="annotation-body">${escapeHtml(f.description)}</div>
 </div>`;
@@ -297,6 +305,15 @@ const CSS = `
     border-radius: 10px;
     font-size: 11px;
     font-weight: 600;
+  }
+  .confidence-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 500;
+    background: #eef1f6;
+    color: #656d76;
   }
   .annotation-category {
     color: #656d76;
