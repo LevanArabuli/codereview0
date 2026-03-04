@@ -43,7 +43,8 @@ export function buildReviewBody(offDiffFindings: ReviewFinding[]): string {
   let body = '**Findings outside the diff** (cannot be posted as inline comments):\n';
   for (const f of offDiffFindings) {
     const severity = capitalizeSeverity(f.severity);
-    body += `\n- **${severity}** \`[${f.confidence}]\` \`${f.file}:${f.line}\` -- ${f.description}`;
+    const confLabel = f.confidence === 'high' ? '' : ` \`[${f.confidence}]\``;
+    body += `\n- **${severity}**${confLabel} \`${f.file}:${f.line}\` -- ${f.description}`;
   }
 
   return body;

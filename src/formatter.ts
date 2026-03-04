@@ -20,7 +20,8 @@ export function capitalizeSeverity(severity: string): string {
  */
 export function formatInlineComment(finding: ReviewFinding): string {
   const severity = capitalizeSeverity(finding.severity);
-  let body = `**${severity}** \`[${finding.confidence}]\`\n\n${finding.description}`;
+  const confLabel = finding.confidence === 'high' ? '' : ` \`[${finding.confidence}]\``;
+  let body = `**${severity}**${confLabel}\n\n${finding.description}`;
 
   // Append related locations if present
   if (finding.relatedLocations && finding.relatedLocations.length > 0) {
