@@ -22,7 +22,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Output Filtering
 
-- [ ] **FILT-01**: Duplicate findings at the same file+line+category are merged, keeping the highest-severity version
+- [x] **FILT-01**: Duplicate findings at the same file+line+category are merged, keeping the highest-severity version
 - [ ] **FILT-02**: Confidence label displayed only on medium/low findings (absence of label implies high confidence)
 
 ## v2 Requirements
@@ -71,7 +71,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CTX-01 | Phase 2 | Pending |
 | CTX-02 | Phase 2 | Pending |
 | CTX-03 | Phase 2 | Pending |
-| FILT-01 | Phase 1 | Pending |
+| FILT-01 | Phase 1 | Complete |
 | FILT-02 | Phase 1 | Pending |
 
 **Coverage:**
