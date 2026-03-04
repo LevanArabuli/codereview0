@@ -12,7 +12,7 @@ This milestone improves review judgment quality -- the difference between generi
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Output Filtering** - Post-analysis finding deduplication and confidence-aware display
+- [x] **Phase 1: Output Filtering** - Post-analysis finding deduplication and confidence-aware display (completed 2026-03-04)
 - [ ] **Phase 2: Context Infrastructure** - ReviewContext type and context gathering for both quick and deep modes
 - [ ] **Phase 3: Prompt Foundations** - Severity anchoring examples and balanced mode anti-examples in prompt templates
 - [ ] **Phase 4: Context-Aware Review Pipeline** - Intent-aware review, convention scanning, and full pipeline integration
@@ -28,7 +28,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Findings with medium or low confidence display a confidence label in both terminal output and GitHub comments
   3. Findings with high confidence display no confidence label (absence implies high confidence)
   4. Bug and security findings are never suppressed regardless of confidence level
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 01-01-PLAN.md -- Finding deduplication (dedup function + CLI pipeline integration)
@@ -86,7 +86,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Output Filtering | 0/2 | Planning complete | - |
+| 1. Output Filtering | 0/2 | Complete    | 2026-03-04 |
 | 2. Context Infrastructure | 0/0 | Not started | - |
 | 3. Prompt Foundations | 0/0 | Not started | - |
 | 4. Context-Aware Review Pipeline | 0/0 | Not started | - |
