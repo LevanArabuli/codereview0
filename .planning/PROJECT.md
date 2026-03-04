@@ -29,12 +29,17 @@ Produce code review feedback that's as useful as a senior engineer's review — 
 
 - [ ] Context-aware reviews: understand codebase patterns and conventions before reviewing
 - [ ] Intent-aware reviews: understand what the PR is trying to accomplish and review against that goal
-- [ ] Severity calibration: distinguish real bugs from logic issues from design concerns from style nits
-- [ ] Confidence scoring: each finding includes how confident the reviewer is, reducing false positives
 - [ ] Low-value finding suppression: filter out obvious nits, surface only findings worth human attention
-- [ ] Better quick mode prompting: produce more specific, contextual feedback from just the diff
-- [ ] PR-aware context gathering: analyze what the PR touches, pull in related files/tests/patterns
 - [ ] Pre-analysis codebase convention detection for deep mode
+
+### Validated
+
+- ✓ Severity calibration: few-shot anchoring examples for all 4 severity levels — Phase 3
+- ✓ Confidence scoring: each finding includes confidence, displayed only when non-high — Phase 1
+- ✓ Better quick mode prompting: related file context and severity examples in quick mode — Phase 2, Phase 3
+- ✓ PR-aware context gathering: import parsing, naming patterns, budget-capped fetching — Phase 2
+- ✓ Finding deduplication: same file+line+category collapsed to highest severity — Phase 1
+- ✓ Balanced mode anti-examples: concrete TypeScript noise suppression patterns — Phase 3
 
 ### Out of Scope
 
@@ -68,9 +73,12 @@ Security model is non-negotiable: execFile with arg arrays, credential scrubbing
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Keep current output format | Users want better content, not different structure. Inline comments + HTML report stay. | — Pending |
-| Improve both quick and deep modes | Most improvement potential is in deep mode, but quick mode is used more often | — Pending |
-| Focus on judgment over tone | The human quality gap is about knowing what matters, not about phrasing | — Pending |
+| Keep current output format | Users want better content, not different structure. Inline comments + HTML report stay. | Confirmed |
+| Improve both quick and deep modes | Most improvement potential is in deep mode, but quick mode is used more often | Both modes enhanced (Phase 2-3) |
+| Focus on judgment over tone | The human quality gap is about knowing what matters, not about phrasing | Confirmed |
+| Few-shot severity anchoring | Concrete examples anchor Claude's severity labels better than abstract definitions | Phase 3 — shared SEVERITY_EXAMPLES constant |
+| Anti-example noise suppression | "NOT a finding" framing teaches what to skip in balanced mode | Phase 3 — 4 TypeScript anti-examples |
+| Budget-capped context gathering | 50KB/file, 200KB total prevents context overload in quick mode | Phase 2 — ReviewContext with caps |
 
 ---
-*Last updated: 2026-03-04 after initialization*
+*Last updated: 2026-03-04 after Phase 3*

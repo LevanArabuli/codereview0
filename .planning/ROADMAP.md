@@ -13,8 +13,8 @@ This milestone improves review judgment quality -- the difference between generi
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Output Filtering** - Post-analysis finding deduplication and confidence-aware display (completed 2026-03-04)
-- [ ] **Phase 2: Context Infrastructure** - ReviewContext type and context gathering for both quick and deep modes
-- [ ] **Phase 3: Prompt Foundations** - Severity anchoring examples and balanced mode anti-examples in prompt templates
+- [x] **Phase 2: Context Infrastructure** - ReviewContext type and context gathering for both quick and deep modes (completed 2026-03-04)
+- [x] **Phase 3: Prompt Foundations** - Severity anchoring examples and balanced mode anti-examples in prompt templates (completed 2026-03-04)
 - [ ] **Phase 4: Context-Aware Review Pipeline** - Intent-aware review, convention scanning, and full pipeline integration
 
 ## Phase Details
@@ -43,11 +43,11 @@ Plans:
   2. Quick mode fetches 3-5 related files (imports, tests, types) via the Octokit contents API and includes them in the review context
   3. A ReviewContext type exists in types.ts and serves as the shared data contract consumed by both quick and deep mode prompt construction
   4. Context gathering respects budget caps (file count and size limits) to prevent context overload
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 02-01-PLAN.md -- ReviewContext type, fetchFileContent, context discovery module (import parsing, naming patterns, fetching with budget enforcement)
-- [ ] 02-02-PLAN.md -- Prompt integration (related files in quick mode, structured exploration guidance in deep mode) and CLI pipeline wiring
+- [x] 02-01-PLAN.md -- ReviewContext type, fetchFileContent, context discovery module (import parsing, naming patterns, fetching with budget enforcement)
+- [x] 02-02-PLAN.md -- Prompt integration (related files in quick mode, structured exploration guidance in deep mode) and CLI pipeline wiring
 
 ### Phase 3: Prompt Foundations
 **Goal**: Prompt templates anchor the model's severity labels and suppress low-value findings through concrete examples
@@ -57,10 +57,10 @@ Plans:
   1. The balanced mode overlay includes concrete anti-examples of what NOT to flag (trailing newlines, missing JSDoc on private methods, issues TypeScript already catches)
   2. The prompt includes few-shot examples of each severity level (bug, security, suggestion, nitpick) with observable characteristics that distinguish them
   3. Running the eval test suite after prompt changes shows no regression in review quality (no new false positives introduced)
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 03-01-PLAN.md -- Severity anchoring examples (SEVERITY_EXAMPLES constant) and balanced mode anti-examples with TDD
+- [x] 03-01-PLAN.md -- Severity anchoring examples (SEVERITY_EXAMPLES constant) and balanced mode anti-examples with TDD
 
 ### Phase 4: Context-Aware Review Pipeline
 **Goal**: Reviews are calibrated against PR intent and codebase conventions, and the full quality pipeline (context, prompts, filtering) is wired end-to-end
@@ -85,7 +85,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Output Filtering | 0/2 | Complete    | 2026-03-04 |
-| 2. Context Infrastructure | 0/2 | Not started | - |
-| 3. Prompt Foundations | 0/1 | Not started | - |
+| 1. Output Filtering | 2/2 | Complete | 2026-03-04 |
+| 2. Context Infrastructure | 2/2 | Complete | 2026-03-04 |
+| 3. Prompt Foundations | 1/1 | Complete | 2026-03-04 |
 | 4. Context-Aware Review Pipeline | 0/0 | Not started | - |
