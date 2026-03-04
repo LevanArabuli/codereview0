@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getModeOverlay, buildPrompt, buildAgenticPrompt, REVIEW_MODES } from '../src/prompt.js';
+import { getModeOverlay, buildPrompt, buildAgenticPrompt, extractIntent, REVIEW_MODES } from '../src/prompt.js';
 import type { ReviewMode } from '../src/prompt.js';
 import type { PRData, ReviewContext } from '../src/types.js';
 
@@ -426,5 +426,215 @@ describe('severity anchoring examples', () => {
     const quickBlock = quick.slice(quickStart, quick.indexOf('\n\nFocus on the CHANGED code'));
     const agenticBlock = agentic.slice(agenticStart, agentic.indexOf('\n\nReport all issues you find'));
     expect(quickBlock).toBe(agenticBlock);
+  });
+});
+
+describe('extractIntent', () => {
+  // Bugfix detection
+  it('returns bugfix for conventional commit fix: prefix', () => {
+    expect(extractIntent('fix: null pointer in auth flow', '')).toBe('bugfix');
+  });
+
+  it('returns bugfix for natural language Fix title', () => {
+    expect(extractIntent('Fix the login bug', '')).toBe('bugfix');
+  });
+
+  it('returns bugfix for hotfix prefix', () => {
+    expect(extractIntent('hotfix: crash on empty input', '')).toBe('bugfix');
+  });
+
+  it('returns bugfix for title with bug keyword', () => {
+    expect(extractIntent('Fix a critical bug in validation', '')).toBe('bugfix');
+  });
+
+  it('returns bugfix for patch keyword', () => {
+    expect(extractIntent('patch: memory leak in worker', '')).toBe('bugfix');
+  });
+
+  // Refactor detection
+  it('returns refactor for natural language Refactor title', () => {
+    expect(extractIntent('Refactor user service', '')).toBe('refactor');
+  });
+
+  it('returns refactor for conventional commit refactor: prefix', () => {
+    expect(extractIntent('refactor: simplify auth logic', '')).toBe('refactor');
+  });
+
+  it('returns refactor for cleanup keyword', () => {
+    expect(extractIntent('cleanup: remove dead code', '')).toBe('refactor');
+  });
+
+  it('returns refactor for restructure keyword', () => {
+    expect(extractIntent('Restructure the module layout', '')).toBe('refactor');
+  });
+
+  // Feature detection
+  it('returns feature for conventional commit feat: prefix', () => {
+    expect(extractIntent('feat: add dark mode support', '')).toBe('feature');
+  });
+
+  it('returns feature for natural language Add title', () => {
+    expect(extractIntent('Add new payment endpoint', '')).toBe('feature');
+  });
+
+  it('returns feature for Implement keyword', () => {
+    expect(extractIntent('Implement OAuth flow', '')).toBe('feature');
+  });
+
+  it('returns feature for introduce keyword', () => {
+    expect(extractIntent('Introduce rate limiting middleware', '')).toBe('feature');
+  });
+
+  // Dependency detection
+  it('returns dependency for Bump keyword', () => {
+    expect(extractIntent('Bump @octokit/rest from 21 to 22', '')).toBe('dependency');
+  });
+
+  it('returns dependency for chore: upgrade conventional commit', () => {
+    expect(extractIntent('chore: upgrade typescript to 5.7', '')).toBe('dependency');
+  });
+
+  it('returns dependency for update with version keyword', () => {
+    expect(extractIntent('Update package version to 2.0', '')).toBe('dependency');
+  });
+
+  // Docs-config detection
+  it('returns docs-config for conventional commit docs: prefix', () => {
+    expect(extractIntent('docs: update README', '')).toBe('docs-config');
+  });
+
+  it('returns docs-config for Update CI configuration', () => {
+    expect(extractIntent('Update CI configuration', '')).toBe('docs-config');
+  });
+
+  it('returns docs-config for readme keyword', () => {
+    expect(extractIntent('Update the README with examples', '')).toBe('docs-config');
+  });
+
+  // Unknown / ambiguous
+  it('returns unknown for ambiguous title', () => {
+    expect(extractIntent('Update code', '')).toBe('unknown');
+  });
+
+  it('returns unknown for empty title', () => {
+    expect(extractIntent('', '')).toBe('unknown');
+  });
+
+  // Priority: bugfix > feature
+  it('returns bugfix over feature for compound title (priority ordering)', () => {
+    expect(extractIntent('fix and add feature for X', '')).toBe('bugfix');
+  });
+
+  // Body fallback
+  it('detects intent from body when title is ambiguous', () => {
+    expect(extractIntent('Update code', 'This fixes a critical bug')).toBe('bugfix');
+  });
+
+  it('detects feature intent from body fallback', () => {
+    expect(extractIntent('Changes', 'This adds a new feature for users')).toBe('feature');
+  });
+});
+
+describe('buildPrompt with intent', () => {
+  it('includes PR INTENT and REFACTOR label when intent is refactor', () => {
+    const prompt = buildPrompt(mockPR, 'balanced', { intent: 'refactor' });
+    expect(prompt).toContain('PR INTENT');
+    expect(prompt.toUpperCase()).toContain('REFACTOR');
+  });
+
+  it('includes PR INTENT and BUG FIX label when intent is bugfix', () => {
+    const prompt = buildPrompt(mockPR, 'balanced', { intent: 'bugfix' });
+    expect(prompt).toContain('PR INTENT');
+    expect(prompt.toUpperCase()).toContain('BUG FIX');
+  });
+
+  it('does NOT include PR INTENT when intent is unknown', () => {
+    const prompt = buildPrompt(mockPR, 'balanced', { intent: 'unknown' });
+    expect(prompt).not.toContain('PR INTENT');
+  });
+
+  it('works identically to before when context is undefined (backward compat)', () => {
+    const withoutContext = buildPrompt(mockPR, 'balanced');
+    const withUndefined = buildPrompt(mockPR, 'balanced', undefined);
+    expect(withoutContext).toBe(withUndefined);
+    expect(withoutContext).not.toContain('PR INTENT');
+  });
+
+  it('does NOT include PR INTENT when context has no intent field', () => {
+    const prompt = buildPrompt(mockPR, 'balanced', {});
+    expect(prompt).not.toContain('PR INTENT');
+  });
+
+  it('intent guidance placed after </pr_metadata> and before <diff>', () => {
+    const prompt = buildPrompt(mockPR, 'balanced', { intent: 'feature' });
+    const metadataEnd = prompt.indexOf('</pr_metadata>');
+    const intentIndex = prompt.indexOf('PR INTENT');
+    const diffStart = prompt.indexOf('<diff>');
+    expect(metadataEnd).toBeGreaterThan(-1);
+    expect(intentIndex).toBeGreaterThan(metadataEnd);
+    expect(diffStart).toBeGreaterThan(intentIndex);
+  });
+
+  it('intent guidance includes safety clause about bugs/security always reported', () => {
+    const prompt = buildPrompt(mockPR, 'balanced', { intent: 'refactor' });
+    expect(prompt).toMatch(/bugs.*security.*always.*reported|always.*reported.*regardless/i);
+  });
+
+  it('all non-unknown intent categories include the safety clause', () => {
+    const intents = ['bugfix', 'refactor', 'feature', 'dependency', 'docs-config'];
+    for (const intent of intents) {
+      const prompt = buildPrompt(mockPR, 'balanced', { intent });
+      expect(prompt).toMatch(/bugs.*security.*always.*reported|always.*reported.*regardless/i);
+    }
+  });
+
+  it('intent guidance never modifies severity labels', () => {
+    const intents = ['bugfix', 'refactor', 'feature', 'dependency', 'docs-config'];
+    for (const intent of intents) {
+      const prompt = buildPrompt(mockPR, 'balanced', { intent });
+      // Should not override severity definitions
+      expect(prompt).not.toMatch(/severity.*should.*be.*changed/i);
+    }
+  });
+});
+
+describe('buildAgenticPrompt with intent', () => {
+  it('includes PR INTENT and BUG FIX label when intent is bugfix', () => {
+    const prompt = buildAgenticPrompt(mockPR, 'balanced', { intent: 'bugfix' });
+    expect(prompt).toContain('PR INTENT');
+    expect(prompt.toUpperCase()).toContain('BUG FIX');
+  });
+
+  it('includes PR INTENT and FEATURE label when intent is feature', () => {
+    const prompt = buildAgenticPrompt(mockPR, 'balanced', { intent: 'feature' });
+    expect(prompt).toContain('PR INTENT');
+    expect(prompt.toUpperCase()).toContain('FEATURE');
+  });
+
+  it('does NOT include PR INTENT when intent is unknown', () => {
+    const prompt = buildAgenticPrompt(mockPR, 'balanced', { intent: 'unknown' });
+    expect(prompt).not.toContain('PR INTENT');
+  });
+
+  it('works identically to before when context is undefined (backward compat)', () => {
+    const withoutContext = buildAgenticPrompt(mockPR);
+    const withUndefined = buildAgenticPrompt(mockPR, 'balanced', undefined);
+    expect(withoutContext).toBe(withUndefined);
+    expect(withoutContext).not.toContain('PR INTENT');
+  });
+
+  it('intent guidance placed after </pr_metadata> and before <changed_files> or <diff>', () => {
+    const prompt = buildAgenticPrompt(mockPR, 'balanced', { intent: 'refactor' });
+    const metadataEnd = prompt.indexOf('</pr_metadata>');
+    const intentIndex = prompt.indexOf('PR INTENT');
+    const changedFilesStart = prompt.indexOf('<changed_files>');
+    expect(metadataEnd).toBeGreaterThan(-1);
+    expect(intentIndex).toBeGreaterThan(metadataEnd);
+    expect(changedFilesStart).toBeGreaterThan(intentIndex);
+  });
+
+  it('intent guidance includes safety clause about bugs/security always reported', () => {
+    const prompt = buildAgenticPrompt(mockPR, 'balanced', { intent: 'feature' });
+    expect(prompt).toMatch(/bugs.*security.*always.*reported|always.*reported.*regardless/i);
   });
 });

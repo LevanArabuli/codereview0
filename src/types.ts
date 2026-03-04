@@ -62,4 +62,5 @@ export interface ExplorationCategory {
 export interface ReviewContext {
   relatedFiles?: RelatedFile[];           // Quick mode: fetched file contents
   explorationGuidance?: ExplorationCategory[]; // Deep mode: structured guidance
+  intent?: string;                        // PR intent category for review calibration
 }
