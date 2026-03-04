@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fetchPRData } from '../src/github.js';
+import { fetchPRData, fetchFileContent } from '../src/github.js';
 import type { Octokit } from '@octokit/rest';
 
 function createMockOctokit(overrides?: {
@@ -82,5 +82,79 @@ describe('fetchPRData', () => {
     const result = await fetchPRData(octokit, 'owner', 'repo', 42);
 
     expect(result.author).toBe('unknown');
+  });
+});
+
+function createMockOctokitForContent(
+  response?: { data: unknown },
+  shouldThrow?: boolean,
+) {
+  return {
+    repos: {
+      getContent: async (params: { owner: string; repo: string; path: string; ref?: string }) => {
+        if (shouldThrow) {
+          const err = new Error('Not Found') as Error & { status: number };
+          err.status = 404;
+          throw err;
+        }
+        // Store params so tests can inspect them
+        (createMockOctokitForContent as unknown as { lastParams: unknown }).lastParams = params;
+        return response;
+      },
+    },
+  } as unknown as Octokit;
+}
+
+describe('fetchFileContent', () => {
+  it('returns decoded string content for a valid file path', async () => {
+    const content = Buffer.from('export const foo = 42;', 'utf-8').toString('base64');
+    const octokit = createMockOctokitForContent({
+      data: { type: 'file', content, encoding: 'base64', size: 22 },
+    });
+
+    const result = await fetchFileContent(octokit, 'owner', 'repo', 'src/foo.ts', 'abc123');
+    expect(result).toBe('export const foo = 42;');
+  });
+
+  it('returns null when Octokit responds with a directory (Array response)', async () => {
+    const octokit = createMockOctokitForContent({
+      data: [
+        { name: 'file1.ts', type: 'file' },
+        { name: 'file2.ts', type: 'file' },
+      ],
+    });
+
+    const result = await fetchFileContent(octokit, 'owner', 'repo', 'src/', 'abc123');
+    expect(result).toBeNull();
+  });
+
+  it('returns null when data.type is not file', async () => {
+    const octokit = createMockOctokitForContent({
+      data: { type: 'symlink', target: 'other.ts' },
+    });
+
+    const result = await fetchFileContent(octokit, 'owner', 'repo', 'src/link.ts', 'abc123');
+    expect(result).toBeNull();
+  });
+
+  it('returns null on 404 error (does not throw)', async () => {
+    const octokit = createMockOctokitForContent(undefined, true);
+
+    const result = await fetchFileContent(octokit, 'owner', 'repo', 'nonexistent.ts', 'abc123');
+    expect(result).toBeNull();
+  });
+
+  it('passes ref parameter to Octokit for branch-specific fetch', async () => {
+    const content = Buffer.from('hello', 'utf-8').toString('base64');
+    const octokit = createMockOctokitForContent({
+      data: { type: 'file', content, encoding: 'base64', size: 5 },
+    });
+
+    await fetchFileContent(octokit, 'myowner', 'myrepo', 'src/file.ts', 'sha-ref-123');
+    const params = (createMockOctokitForContent as unknown as { lastParams: { owner: string; repo: string; path: string; ref: string } }).lastParams;
+    expect(params.owner).toBe('myowner');
+    expect(params.repo).toBe('myrepo');
+    expect(params.path).toBe('src/file.ts');
+    expect(params.ref).toBe('sha-ref-123');
   });
 });
