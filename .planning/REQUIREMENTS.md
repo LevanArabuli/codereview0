@@ -10,7 +10,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Prompt Quality
 
 - [x] **PROMPT-01**: Balanced mode overlay includes concrete anti-examples of what NOT to flag (trailing newlines, missing JSDoc on private methods, issues TypeScript already catches)
-- [ ] **PROMPT-02**: Review derives PR intent from title/description and calibrates finding severity against that goal
+- [x] **PROMPT-02**: Review derives PR intent from title/description and calibrates finding severity against that goal
 - [x] **PROMPT-03**: Prompt includes few-shot examples of each severity level (bug, security, suggestion, nitpick) anchoring the model's labels to observable characteristics
 - [ ] **PROMPT-04**: Deep mode performs a convention scan phase before reviewing -- reads 2-3 representative files near changed files to identify naming, error handling, and structural patterns
 
@@ -65,7 +65,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PROMPT-01 | Phase 3 | Complete |
-| PROMPT-02 | Phase 4 | Pending |
+| PROMPT-02 | Phase 4 | Complete |
 | PROMPT-03 | Phase 3 | Complete |
 | PROMPT-04 | Phase 4 | Pending |
 | CTX-01 | Phase 2 | Complete |

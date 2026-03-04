@@ -72,7 +72,7 @@ Plans:
   3. Convention context gathered during the scan appears in the review prompt and visibly influences finding content (findings reference detected patterns)
   4. The CLI orchestrates the full pipeline: context gathering before prompt construction, filtering after analysis
   5. All existing tests pass and the eval fixture suite shows no regression
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 04-01-PLAN.md -- PR intent extraction and intent-based flagging guidance in both prompt functions
@@ -88,4 +88,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. Output Filtering | 2/2 | Complete | 2026-03-04 |
 | 2. Context Infrastructure | 2/2 | Complete | 2026-03-04 |
 | 3. Prompt Foundations | 1/1 | Complete | 2026-03-04 |
-| 4. Context-Aware Review Pipeline | 0/2 | Planning complete | - |
+| 4. Context-Aware Review Pipeline | 1/2 | In Progress|  |
