@@ -4,7 +4,7 @@ import { parsePRUrl } from './url-parser.js';
 import { checkPrerequisites } from './prerequisites.js';
 import { createOctokit, fetchPRData, postReview, fetchFileContent } from './github.js';
 import { printPRSummary, printErrors, printDebug, printModel, printMode, printMeta, formatDuration, estimateTokens, printProgress, printProgressDone, printAnalysisSummary, printFindings } from './output.js';
-import { buildPrompt, type ReviewMode } from './prompt.js';
+import { buildPrompt, extractIntent, type ReviewMode } from './prompt.js';
 import { analyzeDiff, analyzeAgentic } from './analyzer.js';
 import { cloneRepo, getClonePath, promptCleanup } from './cloner.js';
 import { parseDiffHunks } from './diff-parser.js';
@@ -169,6 +169,13 @@ program
       printDebug(`Mode: ${options.mode}`);
     }
 
+    // Extract PR intent for review calibration (works for both modes)
+    const intent = extractIntent(prData.title, prData.body ?? '');
+    if (options.verbose) {
+      const source = intent !== 'unknown' ? 'from title' : 'not detected';
+      printDebug(`Intent: ${intent} (${source})`);
+    }
+
     let findings;
 
     if (options.deep) {
@@ -185,6 +192,13 @@ program
         if (options.verbose) {
           printDebug('Context gathering failed: ' + sanitizeError(error));
         }
+      }
+
+      // Thread intent into deep context
+      if (deepContext) {
+        deepContext.intent = intent;
+      } else {
+        deepContext = { intent };
       }
 
       // 4a. Clone repository
@@ -244,6 +258,13 @@ program
           if (options.verbose) {
             printDebug('Context gathering failed: ' + sanitizeError(error));
           }
+        }
+
+        // Thread intent into fallback context
+        if (fallbackContext) {
+          fallbackContext.intent = intent;
+        } else {
+          fallbackContext = { intent };
         }
 
         const quickPrompt = buildPrompt(prData, options.mode, fallbackContext);
@@ -310,6 +331,13 @@ program
         if (options.verbose) {
           printDebug('Context gathering failed: ' + sanitizeError(error));
         }
+      }
+
+      // Thread intent into quick context
+      if (quickContext) {
+        quickContext.intent = intent;
+      } else {
+        quickContext = { intent };
       }
 
       // 4. Analyze diff with progress and timing
