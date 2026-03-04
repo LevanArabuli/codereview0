@@ -16,7 +16,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Context Gathering
 
-- [ ] **CTX-01**: Deep mode prompt explicitly guides Claude on which adjacent files to explore (callers, tests, type definitions for changed modules)
+- [x] **CTX-01**: Deep mode prompt explicitly guides Claude on which adjacent files to explore (callers, tests, type definitions for changed modules)
 - [x] **CTX-02**: Quick mode fetches 3-5 related files via Octokit /contents API (imports, tests, types) to enrich context beyond the diff
 - [x] **CTX-03**: ReviewContext type serves as shared data contract between quick and deep modes for gathered context
 
@@ -68,7 +68,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROMPT-02 | Phase 4 | Pending |
 | PROMPT-03 | Phase 3 | Pending |
 | PROMPT-04 | Phase 4 | Pending |
-| CTX-01 | Phase 2 | Pending |
+| CTX-01 | Phase 2 | Complete |
 | CTX-02 | Phase 2 | Complete |
 | CTX-03 | Phase 2 | Complete |
 | FILT-01 | Phase 1 | Complete |
