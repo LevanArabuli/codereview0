@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getModeOverlay, buildPrompt, buildAgenticPrompt, REVIEW_MODES } from '../src/prompt.js';
 import type { ReviewMode } from '../src/prompt.js';
-import type { PRData } from '../src/types.js';
+import type { PRData, ReviewContext } from '../src/types.js';
 
 const mockPR: PRData = {
   number: 1,
@@ -247,5 +247,132 @@ describe('buildAgenticPrompt', () => {
     expect(prompt).toContain('Exploration is unlimited');
     expect(prompt).not.toMatch(/at most/i);
     expect(prompt).not.toMatch(/file budget/i);
+  });
+});
+
+describe('buildPrompt with ReviewContext', () => {
+  const mockContext: ReviewContext = {
+    relatedFiles: [
+      { path: 'src/utils.ts', content: 'export function helper() {}', reason: 'import' },
+      { path: 'tests/test.test.ts', content: 'describe("test", () => {})', reason: 'test' },
+    ],
+  };
+
+  it('includes related_file XML tags when relatedFiles provided', () => {
+    const prompt = buildPrompt(mockPR, 'balanced', mockContext);
+    expect(prompt).toContain('<related_file');
+    expect(prompt).toContain('path="src/utils.ts"');
+    expect(prompt).toContain('reason="import"');
+    expect(prompt).toContain('export function helper() {}');
+    expect(prompt).toContain('</related_file>');
+  });
+
+  it('includes related_file for each file with correct attributes', () => {
+    const prompt = buildPrompt(mockPR, 'balanced', mockContext);
+    expect(prompt).toContain('path="src/utils.ts"');
+    expect(prompt).toContain('reason="import"');
+    expect(prompt).toContain('path="tests/test.test.ts"');
+    expect(prompt).toContain('reason="test"');
+  });
+
+  it('includes introductory text about related files', () => {
+    const prompt = buildPrompt(mockPR, 'balanced', mockContext);
+    expect(prompt).toContain('The following related files from the codebase provide additional context');
+  });
+
+  it('produces no related file section with empty relatedFiles array', () => {
+    const emptyContext: ReviewContext = { relatedFiles: [] };
+    const prompt = buildPrompt(mockPR, 'balanced', emptyContext);
+    expect(prompt).not.toContain('<related_file');
+    expect(prompt).not.toContain('related files from the codebase');
+  });
+
+  it('works identically to current behavior when context is undefined', () => {
+    const withoutContext = buildPrompt(mockPR, 'balanced');
+    const withUndefined = buildPrompt(mockPR, 'balanced', undefined);
+    expect(withoutContext).toBe(withUndefined);
+    expect(withoutContext).not.toContain('<related_file');
+  });
+
+  it('places related files after </diff> and before finding format instructions', () => {
+    const prompt = buildPrompt(mockPR, 'balanced', mockContext);
+    const diffEndIndex = prompt.indexOf('</diff>');
+    const relatedFileIndex = prompt.indexOf('<related_file');
+    const findingFormatIndex = prompt.indexOf('For each issue found');
+    expect(diffEndIndex).toBeGreaterThan(-1);
+    expect(relatedFileIndex).toBeGreaterThan(diffEndIndex);
+    expect(findingFormatIndex).toBeGreaterThan(relatedFileIndex);
+  });
+});
+
+describe('buildAgenticPrompt with ReviewContext', () => {
+  const multiFilePR: PRData = {
+    ...mockPR,
+    files: [
+      { filename: 'src/auth.ts', status: 'modified', additions: 20, deletions: 5, changes: 25 },
+      { filename: 'src/middleware.ts', status: 'added', additions: 50, deletions: 0, changes: 50 },
+    ],
+    changedFiles: 2,
+  };
+
+  const mockGuidance: ReviewContext = {
+    explorationGuidance: [
+      { file: 'src/auth.ts', categories: ['callers', 'tests', 'type-definitions'] },
+      { file: 'src/middleware.ts', categories: ['callers', 'tests', 'type-definitions'] },
+    ],
+  };
+
+  it('replaces generic exploration with structured per-file guidance', () => {
+    const prompt = buildAgenticPrompt(multiFilePR, 'balanced', mockGuidance);
+    // Should contain per-file headers
+    expect(prompt).toContain('### src/auth.ts');
+    expect(prompt).toContain('### src/middleware.ts');
+  });
+
+  it('mentions callers, tests, type-definitions for each file', () => {
+    const prompt = buildAgenticPrompt(multiFilePR, 'balanced', mockGuidance);
+    expect(prompt).toMatch(/Callers/);
+    expect(prompt).toMatch(/Tests/);
+    expect(prompt).toMatch(/Type definitions/i);
+  });
+
+  it('removes generic exploration categories when guidance provided', () => {
+    const prompt = buildAgenticPrompt(multiFilePR, 'balanced', mockGuidance);
+    // Should NOT contain the generic exploration categories
+    expect(prompt).not.toContain('**Broken callers**');
+    expect(prompt).not.toContain('**Pattern violations**');
+    expect(prompt).not.toContain('**Duplication**');
+  });
+
+  it('preserves evidence requirement and cross-file constraints', () => {
+    const prompt = buildAgenticPrompt(multiFilePR, 'balanced', mockGuidance);
+    expect(prompt).toContain('Every cross-file finding MUST reference specific files and lines as evidence');
+    expect(prompt).toContain('Every cross-file finding MUST include relatedLocations');
+  });
+
+  it('works identically to current behavior when context is undefined', () => {
+    const withoutContext = buildAgenticPrompt(mockPR);
+    const withUndefined = buildAgenticPrompt(mockPR, 'balanced', undefined);
+    expect(withoutContext).toBe(withUndefined);
+    // Generic exploration should be present
+    expect(withoutContext).toContain('**Broken callers**');
+    expect(withoutContext).toContain('**Pattern violations**');
+  });
+
+  it('preserves generic exploration when explorationGuidance is empty array', () => {
+    const emptyGuidance: ReviewContext = { explorationGuidance: [] };
+    const prompt = buildAgenticPrompt(mockPR, 'balanced', emptyGuidance);
+    expect(prompt).toContain('**Broken callers**');
+    expect(prompt).toContain('**Pattern violations**');
+  });
+
+  it('still contains Codebase Exploration header', () => {
+    const prompt = buildAgenticPrompt(multiFilePR, 'balanced', mockGuidance);
+    expect(prompt).toContain('## Codebase Exploration');
+  });
+
+  it('contains unlimited exploration note with guidance', () => {
+    const prompt = buildAgenticPrompt(multiFilePR, 'balanced', mockGuidance);
+    expect(prompt).toContain('Exploration is unlimited');
   });
 });
