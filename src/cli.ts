@@ -12,6 +12,7 @@ import { partitionFindings, buildReviewBody } from './review-builder.js';
 import { formatInlineComment } from './formatter.js';
 import { EXIT_PREREQ, EXIT_INVALID_URL, EXIT_API_ERROR, EXIT_ANALYSIS_ERROR, sanitizeError } from './errors.js';
 import { generateHtmlReport, openInBrowser } from './html-report.js';
+import { deduplicateFindings } from './dedup.js';
 import { rmSync, existsSync } from 'node:fs';
 import type { PRData, ParsedPR } from './types.js';
 import type { ReviewFinding } from './schemas.js';
@@ -34,12 +35,17 @@ process.on('SIGINT', () => { cleanupOnExit(); process.exit(130); });
  * Called from both deep and quick mode branches after findings are obtained.
  */
 async function handlePostAnalysis(
-  findings: ReviewFinding[],
+  rawFindings: ReviewFinding[],
   prData: PRData,
   parsed: ParsedPR,
   octokit: ReturnType<typeof createOctokit>,
   options: { verbose?: boolean; post?: boolean; html?: boolean },
 ): Promise<void> {
+  // Deduplicate findings before any output
+  const rawCount = rawFindings.length;
+  const { deduplicated, removedCount } = deduplicateFindings(rawFindings);
+  const findings = deduplicated;
+
   // Terminal output (always shown)
   printAnalysisSummary(findings);
   printFindings(findings);
@@ -56,9 +62,9 @@ async function handlePostAnalysis(
       const diffHunks = parseDiffHunks(prData.diff);
       const { inline, offDiff } = partitionFindings(findings, diffHunks);
       const posted = inline.length + (offDiff.length > 0 ? 1 : 0);
-      printDebug(`Findings: ${findings.length} raw, ${posted} posted`);
+      printDebug(`Findings: ${rawCount} raw, ${removedCount} duplicates removed, ${posted} posted`);
     } else {
-      printDebug(`Findings: ${findings.length} raw`);
+      printDebug(`Findings: ${rawCount} raw, ${removedCount} duplicates removed`);
     }
   }
 
