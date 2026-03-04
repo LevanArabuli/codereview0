@@ -6,6 +6,88 @@ export const REVIEW_MODES = ['strict', 'detailed', 'lenient', 'balanced'] as con
 /** A review mode that controls the scope and thoroughness of findings */
 export type ReviewMode = typeof REVIEW_MODES[number];
 
+/** PR intent categories for review calibration */
+export type PRIntent = 'feature' | 'bugfix' | 'refactor' | 'dependency' | 'docs-config' | 'unknown';
+
+/**
+ * Extract the intent of a PR from its title and body.
+ * Checks in priority order: bugfix > refactor > dependency > docs-config > feature.
+ * Falls back to body analysis if title yields 'unknown'.
+ */
+export function extractIntent(title: string, body: string): PRIntent {
+  const lower = title.toLowerCase();
+
+  // Priority 1: Bugfix
+  if (/^fix[:(\/]/.test(lower) || /\bfix(?:es|ed)?\b|\bbug\b|\bhotfix\b|\bpatch\b/.test(lower)) {
+    return 'bugfix';
+  }
+
+  // Priority 2: Refactor
+  if (/^refactor[:(\/]/.test(lower) || /\brefactor\b|\bcleanup\b|\brestructure\b|\breorganize\b/.test(lower)) {
+    return 'refactor';
+  }
+
+  // Priority 3: Dependency
+  if (/^chore[:(\/].*(?:dep|bump|upgrade|version)/i.test(lower) ||
+      /\bbump\b|\bdep(?:endenc(?:y|ies))?\b|\bupgrade\b/.test(lower) ||
+      /\bupdate\b.*(?:version|package|dep)/.test(lower)) {
+    return 'dependency';
+  }
+
+  // Priority 4: Docs-config
+  if (/^docs[:(\/]/.test(lower) ||
+      /\bdocs?\b|\bdocument(?:ation)?\b|\breadme\b/.test(lower) ||
+      /\bconfig\b|\bci\b/.test(lower) ||
+      (/^chore[:(\/]/.test(lower) && /\bdocs?\b|\bci\b/.test(lower))) {
+    return 'docs-config';
+  }
+
+  // Priority 5: Feature
+  if (/^feat[:(\/]/.test(lower) || /\bfeat(?:ure)?\b|\badd\b|\bimplement\b|\bintroduce\b|\bnew\b/.test(lower)) {
+    return 'feature';
+  }
+
+  // Body fallback: use stricter patterns on combined title+body
+  if (body) {
+    const combined = (title + ' ' + body).toLowerCase();
+    if (/\bfix(?:es|ed)?\b/.test(combined) && /\bbug\b/.test(combined)) return 'bugfix';
+    if (/\bfix(?:es|ed)?\b/.test(combined)) return 'bugfix';
+    if (/\brefactor\b/.test(combined)) return 'refactor';
+    if (/\badd(?:s|ed)?\b.*\bfeature\b|\bfeat(?:ure)?\b|\bintroduce\b|\bimplement\b/.test(combined)) return 'feature';
+  }
+
+  return 'unknown';
+}
+
+/**
+ * Generate intent-specific flagging guidance for the review prompt.
+ * Returns empty string for 'unknown' intent (no guidance injected).
+ * Every non-unknown category includes the bugs/security safety clause.
+ */
+function getIntentGuidance(intent: string): string {
+  const SAFETY_CLAUSE = 'Bugs and security issues are ALWAYS reported regardless of PR intent.';
+
+  switch (intent) {
+    case 'bugfix':
+      return `\n\nPR INTENT -- BUG FIX: This PR is fixing a bug. Focus on whether the fix is correct and complete -- does it address the root cause or just the symptom? Check for edge cases the fix might miss and whether the fix introduces any regressions. Suggestions about code style or refactoring are lower priority unless they affect correctness. ${SAFETY_CLAUSE}`;
+
+    case 'refactor':
+      return `\n\nPR INTENT -- REFACTOR: This PR is refactoring existing code. The primary concern is behavioral preservation -- flag any changes that alter observable behavior. Do not flag "missing tests for new behavior" since refactors should not introduce new behavior. Focus on whether the refactoring maintains correctness, preserves the API contract, and does not introduce subtle behavioral changes. ${SAFETY_CLAUSE}`;
+
+    case 'feature':
+      return `\n\nPR INTENT -- FEATURE: This PR adds new functionality. Focus on correctness of the new code, edge case handling, error handling, and whether the feature integrates well with existing code. Check for missing input validation, unhandled error paths, and test coverage for the new behavior. ${SAFETY_CLAUSE}`;
+
+    case 'dependency':
+      return `\n\nPR INTENT -- DEPENDENCY UPDATE: This PR updates dependencies. Focus on breaking API changes, deprecated usage patterns, and compatibility issues. Check if any code changes are needed to accommodate the updated dependency API. Style suggestions are not relevant for dependency updates. ${SAFETY_CLAUSE}`;
+
+    case 'docs-config':
+      return `\n\nPR INTENT -- DOCS/CONFIG: This PR updates documentation or configuration. Focus on accuracy of documentation, correctness of configuration values, and whether config changes could affect runtime behavior. Code style suggestions are not relevant. ${SAFETY_CLAUSE}`;
+
+    default:
+      return '';
+  }
+}
+
 /** Maximum diff size in characters before truncation (~80KB, safe for Claude context window) */
 const MAX_DIFF_CHARS = 80_000;
 
@@ -163,6 +245,7 @@ export function buildPrompt(prData: PRData, mode?: ReviewMode, context?: ReviewC
   const description = prData.body || '(no description provided)';
 
   const relatedFilesSection = context?.relatedFiles ? formatRelatedFiles(context.relatedFiles) : '';
+  const intentGuidance = context?.intent ? getIntentGuidance(context.intent) : '';
 
   const basePrompt = `You are an experienced software engineer reviewing a pull request. Your role is to be a helpful, constructive colleague -- not a pedantic gatekeeper. Focus on issues that matter: bugs, security vulnerabilities, logic errors, and meaningful code quality improvements.
 
@@ -174,6 +257,7 @@ Description: ${description}
 Branch: ${prData.headBranch} -> ${prData.baseBranch}
 Changed files: ${prData.changedFiles} (+${prData.additions} -${prData.deletions})
 </pr_metadata>
+${intentGuidance}
 
 <diff>
 ${truncateDiff(prData.diff)}
@@ -208,6 +292,7 @@ ${JSON_RESPONSE_INSTRUCTION}`;
 export function buildAgenticPrompt(prData: PRData, mode?: ReviewMode, context?: ReviewContext): string {
   const description = prData.body || '(no description provided)';
   const changedFileList = prData.files.map(f => `- ${f.filename} (${f.status}: +${f.additions} -${f.deletions})`).join('\n');
+  const intentGuidance = context?.intent ? getIntentGuidance(context.intent) : '';
 
   // Build exploration section: structured per-file guidance if provided, otherwise generic
   const hasGuidance = context?.explorationGuidance && context.explorationGuidance.length > 0;
@@ -276,6 +361,7 @@ Description: ${description}
 Branch: ${prData.headBranch} -> ${prData.baseBranch}
 Changed files: ${prData.changedFiles} (+${prData.additions} -${prData.deletions})
 </pr_metadata>
+${intentGuidance}
 
 <changed_files>
 ${changedFileList}
