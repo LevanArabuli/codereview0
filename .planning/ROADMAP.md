@@ -57,11 +57,10 @@ Plans:
   1. The balanced mode overlay includes concrete anti-examples of what NOT to flag (trailing newlines, missing JSDoc on private methods, issues TypeScript already catches)
   2. The prompt includes few-shot examples of each severity level (bug, security, suggestion, nitpick) with observable characteristics that distinguish them
   3. Running the eval test suite after prompt changes shows no regression in review quality (no new false positives introduced)
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md -- Severity anchoring examples (SEVERITY_EXAMPLES constant) and balanced mode anti-examples with TDD
 
 ### Phase 4: Context-Aware Review Pipeline
 **Goal**: Reviews are calibrated against PR intent and codebase conventions, and the full quality pipeline (context, prompts, filtering) is wired end-to-end
@@ -88,5 +87,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Output Filtering | 0/2 | Complete    | 2026-03-04 |
 | 2. Context Infrastructure | 0/2 | Not started | - |
-| 3. Prompt Foundations | 0/0 | Not started | - |
+| 3. Prompt Foundations | 0/1 | Not started | - |
 | 4. Context-Aware Review Pipeline | 0/0 | Not started | - |
