@@ -1,4 +1,4 @@
-import type { PRData } from './types.js';
+import type { PRData, ReviewContext, RelatedFile } from './types.js';
 
 /** Valid review mode strings */
 export const REVIEW_MODES = ['strict', 'detailed', 'lenient', 'balanced'] as const;
@@ -72,6 +72,20 @@ const JSON_RESPONSE_INSTRUCTION = `IMPORTANT: Respond with ONLY a valid JSON obj
 Optional fields per finding: "endLine" (number), "suggestedFix" (string), "relatedLocations" ([{"file": "string", "line": number, "reason": "string"}])`;
 
 /**
+ * Format related files as XML tags for injection into the prompt.
+ * Returns empty string if files array is empty.
+ */
+function formatRelatedFiles(files: RelatedFile[]): string {
+  if (files.length === 0) return '';
+
+  const tags = files.map(f =>
+    `<related_file path="${f.path}" reason="${f.reason}">\n${f.content}\n</related_file>`
+  ).join('\n\n');
+
+  return `\nThe following related files from the codebase provide additional context. Use them to understand how the changed code fits into the larger system:\n\n${tags}\n`;
+}
+
+/**
  * Get the prompt overlay text for a given review mode.
  * The overlay is appended to both quick and deep prompts identically.
  */
@@ -85,8 +99,10 @@ export function getModeOverlay(mode: ReviewMode): string {
  * The prompt includes a reviewer persona, PR metadata in XML tags,
  * the raw unified diff, finding format instructions, and scope guidance.
  */
-export function buildPrompt(prData: PRData, mode?: ReviewMode): string {
+export function buildPrompt(prData: PRData, mode?: ReviewMode, context?: ReviewContext): string {
   const description = prData.body || '(no description provided)';
+
+  const relatedFilesSection = context?.relatedFiles ? formatRelatedFiles(context.relatedFiles) : '';
 
   const basePrompt = `You are an experienced software engineer reviewing a pull request. Your role is to be a helpful, constructive colleague -- not a pedantic gatekeeper. Focus on issues that matter: bugs, security vulnerabilities, logic errors, and meaningful code quality improvements.
 
@@ -102,7 +118,7 @@ Changed files: ${prData.changedFiles} (+${prData.additions} -${prData.deletions}
 <diff>
 ${truncateDiff(prData.diff)}
 </diff>
-
+${relatedFilesSection}
 ${FINDING_FORMAT_INSTRUCTIONS}
 
 Focus on the CHANGED code (lines with + prefix in the diff). Only flag issues in unchanged context lines if they are directly affected by the changes.
@@ -127,9 +143,55 @@ ${JSON_RESPONSE_INSTRUCTION}`;
  * --max-turns: UNDOCUMENTED -- not listed in --help output, but functional; already used in analyzer.ts (lines 78-79, 173)
  * --tools: EXISTS -- specifies available built-in tools (e.g. "Bash,Edit,Read"), already used in analyzer.ts
  */
-export function buildAgenticPrompt(prData: PRData, mode?: ReviewMode): string {
+export function buildAgenticPrompt(prData: PRData, mode?: ReviewMode, context?: ReviewContext): string {
   const description = prData.body || '(no description provided)';
   const changedFileList = prData.files.map(f => `- ${f.filename} (${f.status}: +${f.additions} -${f.deletions})`).join('\n');
+
+  // Build exploration section: structured per-file guidance if provided, otherwise generic
+  const hasGuidance = context?.explorationGuidance && context.explorationGuidance.length > 0;
+  let explorationSection: string;
+
+  if (hasGuidance) {
+    const perFileGuidance = context!.explorationGuidance!.map(g => {
+      const categoryLines = g.categories.map(cat => {
+        switch (cat) {
+          case 'callers':
+            return '- **Callers**: Find functions/modules that import or call into this file. Check if the changes break their expectations.';
+          case 'tests':
+            return '- **Tests**: Find and read test files for this module. Assess whether tests cover the changed behavior.';
+          case 'type-definitions':
+            return '- **Type definitions**: If this file exports types consumed elsewhere, check consumers for compatibility.';
+          default:
+            return `- **${cat}**: Explore this category for potential issues.`;
+        }
+      }).join('\n');
+      return `### ${g.file}\n${categoryLines}`;
+    }).join('\n\n');
+
+    explorationSection = `## Codebase Exploration
+
+After reviewing the diff, explore the codebase to find issues that are invisible from the diff alone. For each changed file, explore these categories:
+
+${perFileGuidance}
+
+Exploration is unlimited -- there are no artificial limits on how many files you read. Stop exploring when further investigation is unlikely to reveal new issues.
+
+Every cross-file finding MUST reference specific files and lines as evidence -- verifiable claims only. Every cross-file finding MUST include relatedLocations connecting back to the PR changes that caused the issue.`;
+  } else {
+    explorationSection = `## Codebase Exploration
+
+After reviewing the diff, explore the codebase to find issues that are invisible from the diff alone. You decide where to look and when to stop based on what the diff tells you.
+
+Look for:
+- **Broken callers**: Functions or APIs whose signature or behavior changed in the diff, but consumers elsewhere still expect the old contract
+- **Pattern violations**: Changes that diverge from established codebase conventions (a pattern requires 2-3 instances in the codebase to be considered established)
+- **Duplication**: The PR introduces code that already exists elsewhere in the codebase
+- **Test coverage gaps**: Discover and read test files to assess whether the changed code has adequate test coverage
+
+Exploration is unlimited -- there are no artificial limits on how many files you read. Read the diff first, then decide which exploration categories are most relevant. Stop exploring when further investigation is unlikely to reveal new issues.
+
+Every cross-file finding MUST reference specific files and lines as evidence -- verifiable claims only. Every cross-file finding MUST include relatedLocations connecting back to the PR changes that caused the issue.`;
+  }
 
   const basePrompt = `You are a senior software engineer performing a thorough code review of a pull request. You have full access to the codebase. Your role is to be a helpful, constructive colleague -- not a pedantic gatekeeper. Focus on issues that matter: bugs, security vulnerabilities, logic errors, and meaningful code quality improvements.
 
@@ -171,19 +233,7 @@ Report all issues you find. Do not filter or limit the count. If you find no iss
 
 If a fix requires changes beyond the scope of this PR (e.g., a broader refactoring effort across multiple components), frame it as a follow-up recommendation rather than a targeted suggestion. Do not flag issues that cannot be meaningfully addressed within this PR alone.
 
-## Codebase Exploration
-
-After reviewing the diff, explore the codebase to find issues that are invisible from the diff alone. You decide where to look and when to stop based on what the diff tells you.
-
-Look for:
-- **Broken callers**: Functions or APIs whose signature or behavior changed in the diff, but consumers elsewhere still expect the old contract
-- **Pattern violations**: Changes that diverge from established codebase conventions (a pattern requires 2-3 instances in the codebase to be considered established)
-- **Duplication**: The PR introduces code that already exists elsewhere in the codebase
-- **Test coverage gaps**: Discover and read test files to assess whether the changed code has adequate test coverage
-
-Exploration is unlimited -- there are no artificial limits on how many files you read. Read the diff first, then decide which exploration categories are most relevant. Stop exploring when further investigation is unlikely to reveal new issues.
-
-Every cross-file finding MUST reference specific files and lines as evidence -- verifiable claims only. Every cross-file finding MUST include relatedLocations connecting back to the PR changes that caused the issue.
+${explorationSection}
 
 ## Output Format
 
