@@ -85,6 +85,35 @@ export async function fetchPRData(
 }
 
 /**
+ * Fetch a single file's content from a specific ref (commit SHA or branch).
+ * Returns decoded UTF-8 content on success, null on any failure.
+ * Failures are silent -- context fetching is best-effort enrichment.
+ */
+export async function fetchFileContent(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  filePath: string,
+  ref: string,
+): Promise<string | null> {
+  try {
+    const { data } = await octokit.repos.getContent({
+      owner,
+      repo,
+      path: filePath,
+      ref,
+    });
+    // Type narrowing: directory returns array, also reject non-file types
+    if (Array.isArray(data) || data.type !== 'file' || !data.content) {
+      return null;
+    }
+    return Buffer.from(data.content, 'base64').toString('utf-8');
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Post a code review to a GitHub pull request.
  *
  * Creates a PENDING review by omitting the `event` parameter entirely.

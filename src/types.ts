@@ -44,3 +44,22 @@ export interface DiffHunk {
   newStart: number;
   newCount: number;
 }
+
+/** A related file fetched for context enrichment */
+export interface RelatedFile {
+  path: string;
+  content: string;
+  reason: 'import' | 'test' | 'type' | 'barrel';
+}
+
+/** Per-file exploration guidance for deep mode */
+export interface ExplorationCategory {
+  file: string;
+  categories: string[];  // e.g., ['callers', 'tests', 'type-definitions']
+}
+
+/** Shared context data contract between quick and deep review modes */
+export interface ReviewContext {
+  relatedFiles?: RelatedFile[];           // Quick mode: fetched file contents
+  explorationGuidance?: ExplorationCategory[]; // Deep mode: structured guidance
+}
