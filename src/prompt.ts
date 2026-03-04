@@ -39,6 +39,31 @@ Do NOT report:
 - Idiomatic language/framework patterns (prop spreading in React, defensive ARIA attributes, common conventions) unless they cause a concrete bug
 - Theoretical concerns without evidence of actual breakage in the codebase
 
+Concrete examples of what NOT to flag:
+
+This is NOT a finding -- TypeScript already catches unused variables:
+\`\`\`
+const unused = getValue();
+// TS error: 'unused' is declared but its value is never read (ts6133)
+\`\`\`
+
+This is NOT a finding -- missing return type on a private method:
+\`\`\`
+private calculateTotal(items: Item[]) {
+  return items.reduce((sum, item) => sum + item.price, 0);
+}
+\`\`\`
+
+This is NOT a finding -- implicit any that TypeScript strict mode catches:
+\`\`\`
+function process(data) { // TS error: Parameter 'data' implicitly has an 'any' type (ts7006)
+  return data.value;
+}
+\`\`\`
+
+This is NOT a finding -- trailing newline at end of file:
+A file ending with or without a trailing newline is not a code quality issue.
+
 Before including a suggestion, ask: "Would a senior engineer consider this worth commenting on in a code review?" If the answer is no, omit it.
 
 Focus on being a helpful colleague: flag what matters, skip what doesn't.`,
@@ -62,6 +87,41 @@ const FINDING_FORMAT_INSTRUCTIONS = `For each issue found, provide:
 - description: 2-4 sentences explaining the problem AND suggesting how to fix it. Be specific and constructive.
 - suggestedFix: (optional) for simple fixes only (null checks, missing imports, simple corrections), provide the corrected code. Omit for complex changes.
 - relatedLocations: (optional) array of other locations in the diff related to this issue, each with file, line, and reason`;
+
+/**
+ * Few-shot severity anchoring examples shared between buildPrompt() and buildAgenticPrompt().
+ * Extracted to prevent drift -- both quick and agentic prompts show identical examples.
+ */
+const SEVERITY_EXAMPLES = `Here are examples of correctly labeled findings at each severity level:
+
+**bug** -- Observable incorrect behavior:
+\`\`\`
+const users = await db.query("SELECT * FROM users WHERE active = true");
+return users[0].name; // crashes if query returns empty array
+\`\`\`
+{"severity": "bug", "confidence": "high", "category": "null-safety", "description": "Array access without bounds check. db.query may return an empty array, causing TypeError on .name access. Add a length check or use optional chaining."}
+
+**security** -- Exploitable vulnerability:
+\`\`\`
+const query = "SELECT * FROM users WHERE id = " + userId;
+\`\`\`
+{"severity": "security", "confidence": "high", "category": "sql-injection", "description": "String concatenation in SQL query allows injection. Use parameterized queries instead."}
+
+**suggestion** -- Meaningful improvement:
+\`\`\`
+let result = [];
+for (const item of items) {
+  if (item.active) result.push(item.name);
+}
+\`\`\`
+{"severity": "suggestion", "confidence": "medium", "category": "readability", "description": "Imperative filter+map loop can be replaced with items.filter(i => i.active).map(i => i.name) for clarity."}
+
+**nitpick** -- Minor style observation:
+\`\`\`
+import { readFile } from 'fs/promises';
+import { join } from 'path'; // unused in this file
+\`\`\`
+{"severity": "nitpick", "confidence": "high", "category": "unused-import", "description": "The 'join' import from 'path' appears unused. Remove it to keep imports clean."}`;
 
 /**
  * JSON response instruction shared between buildPrompt() and buildAgenticPrompt().
@@ -120,6 +180,8 @@ ${truncateDiff(prData.diff)}
 </diff>
 ${relatedFilesSection}
 ${FINDING_FORMAT_INSTRUCTIONS}
+
+${SEVERITY_EXAMPLES}
 
 Focus on the CHANGED code (lines with + prefix in the diff). Only flag issues in unchanged context lines if they are directly affected by the changes.
 
@@ -228,6 +290,8 @@ ${truncateDiff(prData.diff)}
 Read the diff above thoroughly and identify all issues in the changed code before beginning any codebase exploration. Complete your diff analysis first — only then explore cross-file implications. Focus on the CHANGED code (lines with + prefix in the diff). Only flag issues in unchanged context lines if they are directly affected by the changes.
 
 ${FINDING_FORMAT_INSTRUCTIONS}
+
+${SEVERITY_EXAMPLES}
 
 Report all issues you find. Do not filter or limit the count. If you find no issues, return an empty findings array.
 

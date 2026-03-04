@@ -376,3 +376,55 @@ describe('buildAgenticPrompt with ReviewContext', () => {
     expect(prompt).toContain('Exploration is unlimited');
   });
 });
+
+describe('anti-examples in balanced mode', () => {
+  it('balanced overlay contains concrete anti-example snippets', () => {
+    const overlay = getModeOverlay('balanced');
+    expect(overlay).toContain('This is NOT a finding');
+  });
+
+  it('balanced overlay anti-examples mention TypeScript compiler', () => {
+    const overlay = getModeOverlay('balanced');
+    expect(overlay).toMatch(/typescript|TS error|ts\d{4}/i);
+  });
+
+  it('anti-examples only in balanced mode', () => {
+    expect(getModeOverlay('strict')).not.toContain('This is NOT a finding');
+    expect(getModeOverlay('detailed')).not.toContain('This is NOT a finding');
+    expect(getModeOverlay('lenient')).not.toContain('This is NOT a finding');
+  });
+});
+
+describe('severity anchoring examples', () => {
+  it('buildPrompt includes severity anchoring examples for all 4 levels', () => {
+    const prompt = buildPrompt(mockPR);
+    expect(prompt).toMatch(/"severity":\s*"bug"/);
+    expect(prompt).toMatch(/"severity":\s*"security"/);
+    expect(prompt).toMatch(/"severity":\s*"suggestion"/);
+    expect(prompt).toMatch(/"severity":\s*"nitpick"/);
+  });
+
+  it('buildAgenticPrompt includes severity anchoring examples for all 4 levels', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toMatch(/"severity":\s*"bug"/);
+    expect(prompt).toMatch(/"severity":\s*"security"/);
+    expect(prompt).toMatch(/"severity":\s*"suggestion"/);
+    expect(prompt).toMatch(/"severity":\s*"nitpick"/);
+  });
+
+  it('severity examples identical in quick and agentic prompts', () => {
+    const quick = buildPrompt(mockPR);
+    const agentic = buildAgenticPrompt(mockPR);
+    // Both should contain the shared SEVERITY_EXAMPLES marker
+    const marker = 'correctly labeled findings';
+    expect(quick).toContain(marker);
+    expect(agentic).toContain(marker);
+    // Extract the severity examples block from both and compare
+    const quickStart = quick.indexOf(marker);
+    const agenticStart = agentic.indexOf(marker);
+    // Find the end of severity examples (next double-newline paragraph break after marker)
+    const quickBlock = quick.slice(quickStart, quick.indexOf('\n\nFocus on the CHANGED code'));
+    const agenticBlock = agentic.slice(agenticStart, agentic.indexOf('\n\nReport all issues you find'));
+    expect(quickBlock).toBe(agenticBlock);
+  });
+});
