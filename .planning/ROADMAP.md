@@ -28,11 +28,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Findings with medium or low confidence display a confidence label in both terminal output and GitHub comments
   3. Findings with high confidence display no confidence label (absence implies high confidence)
   4. Bug and security findings are never suppressed regardless of confidence level
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md -- Finding deduplication (dedup function + CLI pipeline integration)
+- [ ] 01-02-PLAN.md -- Conditional confidence labels across all output surfaces
 
 ### Phase 2: Context Infrastructure
 **Goal**: Both review modes can gather structured codebase context before prompt construction
@@ -86,7 +86,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Output Filtering | 0/0 | Not started | - |
+| 1. Output Filtering | 0/2 | Planning complete | - |
 | 2. Context Infrastructure | 0/0 | Not started | - |
 | 3. Prompt Foundations | 0/0 | Not started | - |
 | 4. Context-Aware Review Pipeline | 0/0 | Not started | - |
