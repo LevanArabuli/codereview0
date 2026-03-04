@@ -222,15 +222,18 @@ describe('gatherQuickContext', () => {
       `import { b } from './b';`,
       `import { c } from './c';`,
       `import { d } from './d';`,
+      `import { e } from './e';`,
+      `import { f } from './f';`,
     ].join('\n'));
 
-    // Each file is 80K -- first two fit in 200K budget, third does not
-    const mediumContent = 'y'.repeat(80_000);
+    // Each file is 45K (under 50K per-file limit)
+    // First 4 fit: 4 * 45K = 180K < 200K, fifth would be 225K > 200K
+    const mediumContent = 'y'.repeat(45_000);
     mockFetchFileContent.mockResolvedValue(mediumContent);
 
     const result = await gatherQuickContext(mockOctokit, 'owner', 'repo', 'ref123', changedFiles, contents);
-    // Only 2 files should fit (80K + 80K = 160K < 200K, but 80K + 80K + 80K = 240K > 200K)
-    expect(result.relatedFiles!.length).toBe(2);
+    // Only 4 files should fit (5th would exceed 200K budget)
+    expect(result.relatedFiles!.length).toBe(4);
   });
 
   it('returns empty relatedFiles array when no related files found', async () => {

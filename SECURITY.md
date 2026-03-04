@@ -39,9 +39,10 @@ The primary threat is a malicious PR author who crafts PR content (branch names,
 
 ### API Safety (API-01, API-02, API-03)
 
-- **Read-only Octokit surface**: The tool uses only three Octokit methods:
+- **Read-only Octokit surface**: The tool uses only four Octokit methods:
   - `pulls.get` -- read-only PR metadata and diff
   - `pulls.listFiles` -- read-only file list
+  - `repos.getContent` -- read-only file content for context enrichment
   - `pulls.createReview` -- creates a **PENDING** review (the `event` parameter is omitted, which creates a draft that the user must manually submit through the GitHub UI)
 - **No destructive API calls**: The tool never calls any Octokit method that approves, merges, closes, or deletes anything.
 - **Safe `gh` CLI usage**: The tool invokes `gh` only for:
@@ -57,6 +58,7 @@ The primary threat is a malicious PR author who crafts PR content (branch names,
 |-----------|---------------|--------------|-------|
 | Octokit | `pulls.get` | Read | PR metadata + diff |
 | Octokit | `pulls.listFiles` | Read | Changed file list |
+| Octokit | `repos.getContent` | Read | Related file content for context enrichment |
 | Octokit | `pulls.createReview` | Write (PENDING) | No `event` param = draft review, user submits manually |
 | gh CLI | `gh auth token` | Read | Token retrieval for Octokit |
 | gh CLI | `gh auth status` | Read | Prerequisite check |

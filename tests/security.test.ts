@@ -238,7 +238,7 @@ describe('API - API Safety', () => {
     const octokitCalls = [...source.matchAll(/octokit\.(?:rest\.)?(\w+\.\w+)/g)];
     const methodNames = octokitCalls.map(m => m[1]);
 
-    const allowedMethods = new Set(['pulls.get', 'pulls.listFiles', 'pulls.createReview']);
+    const allowedMethods = new Set(['pulls.get', 'pulls.listFiles', 'pulls.createReview', 'repos.getContent']);
     for (const method of methodNames) {
       expect(allowedMethods.has(method)).toBe(true);
     }

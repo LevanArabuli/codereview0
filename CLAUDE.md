@@ -65,7 +65,7 @@ These are non-negotiable invariants. Read SECURITY.md for the full threat model.
 - **Scrub credentials always** -- All error messages and verbose output pass through `scrubSecrets()`. No escape hatch, even in `--verbose` mode.
 - **Filter environment for Claude subprocess** -- `filterEnv()` strips dangerous env var prefixes (AWS, Azure, GCP, DB, CI secrets)
 - **Clone directory safety** -- Created with `0o700` permissions, cleaned up via try/finally and SIGINT handler
-- **Read-only API surface** -- Octokit: `pulls.get`, `pulls.listFiles`, `pulls.createReview` (PENDING only). No destructive calls.
+- **Read-only API surface** -- Octokit: `pulls.get`, `pulls.listFiles`, `repos.getContent`, `pulls.createReview` (PENDING only). No destructive calls.
 - **Structural push prevention** -- `git remote remove origin` after clone so Claude cannot push even if prompted to
 
 ## Do not
