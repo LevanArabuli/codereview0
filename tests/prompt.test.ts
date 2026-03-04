@@ -20,6 +20,15 @@ const mockPR: PRData = {
   diff: '--- a/test.ts\n+++ b/test.ts\n@@ -1,3 +1,5 @@\n+new line',
 };
 
+const multiFilePR: PRData = {
+  ...mockPR,
+  files: [
+    { filename: 'src/auth.ts', status: 'modified', additions: 20, deletions: 5, changes: 25 },
+    { filename: 'src/middleware.ts', status: 'added', additions: 50, deletions: 0, changes: 50 },
+  ],
+  changedFiles: 2,
+};
+
 describe('REVIEW_MODES', () => {
   it('contains exactly four modes', () => {
     expect(REVIEW_MODES).toHaveLength(4);
@@ -306,15 +315,6 @@ describe('buildPrompt with ReviewContext', () => {
 });
 
 describe('buildAgenticPrompt with ReviewContext', () => {
-  const multiFilePR: PRData = {
-    ...mockPR,
-    files: [
-      { filename: 'src/auth.ts', status: 'modified', additions: 20, deletions: 5, changes: 25 },
-      { filename: 'src/middleware.ts', status: 'added', additions: 50, deletions: 0, changes: 50 },
-    ],
-    changedFiles: 2,
-  };
-
   const mockGuidance: ReviewContext = {
     explorationGuidance: [
       { file: 'src/auth.ts', categories: ['callers', 'tests', 'type-definitions'] },
@@ -636,5 +636,90 @@ describe('buildAgenticPrompt with intent', () => {
   it('intent guidance includes safety clause about bugs/security always reported', () => {
     const prompt = buildAgenticPrompt(mockPR, 'balanced', { intent: 'feature' });
     expect(prompt).toMatch(/bugs.*security.*always.*reported|always.*reported.*regardless/i);
+  });
+});
+
+describe('buildAgenticPrompt convention scan', () => {
+  it('contains Convention Scan section header', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toContain('## Convention Scan');
+  });
+
+  it('references directories from changed files', () => {
+    const prompt = buildAgenticPrompt(multiFilePR);
+    expect(prompt).toContain('src/');
+  });
+
+  it('mentions naming conventions and error handling', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toMatch(/naming convention/i);
+    expect(prompt).toMatch(/error handling/i);
+  });
+
+  it('mentions import organization and module structure', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toMatch(/import/i);
+    expect(prompt).toMatch(/module structure/i);
+  });
+
+  it('explicitly excludes style conventions', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toMatch(/do not.*style|not.*indentation|linter/i);
+  });
+
+  it('requires file:line evidence for convention violations', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toMatch(/file:line|specific file.*evidence/i);
+  });
+
+  it('instructs reading 2-3 existing files', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    expect(prompt).toMatch(/2-3.*files|read.*existing files/i);
+  });
+
+  it('convention scan NOT present in buildPrompt', () => {
+    const prompt = buildPrompt(mockPR);
+    expect(prompt).not.toContain('Convention Scan');
+  });
+
+  it('convention scan appears before pr_metadata in agentic prompt', () => {
+    const prompt = buildAgenticPrompt(mockPR);
+    const conventionIndex = prompt.indexOf('Convention Scan');
+    const metadataIndex = prompt.indexOf('<pr_metadata>');
+    expect(conventionIndex).toBeGreaterThan(-1);
+    expect(metadataIndex).toBeGreaterThan(-1);
+    expect(conventionIndex).toBeLessThan(metadataIndex);
+  });
+
+  it('deduplicates directories', () => {
+    const sameDirPR: PRData = {
+      ...mockPR,
+      files: [
+        { filename: 'src/auth.ts', status: 'modified', additions: 10, deletions: 5, changes: 15 },
+        { filename: 'src/users.ts', status: 'modified', additions: 5, deletions: 2, changes: 7 },
+      ],
+      changedFiles: 2,
+    };
+    const prompt = buildAgenticPrompt(sameDirPR);
+    // Count occurrences of '- `src/`' in convention scan section
+    const conventionStart = prompt.indexOf('## Convention Scan');
+    const conventionEnd = prompt.indexOf('<pr_metadata>');
+    const section = prompt.slice(conventionStart, conventionEnd);
+    const matches = section.match(/`src\/`/g);
+    expect(matches).toHaveLength(1);
+  });
+
+  it('handles root-level files', () => {
+    const rootFilePR: PRData = {
+      ...mockPR,
+      files: [
+        { filename: 'app.ts', status: 'modified', additions: 10, deletions: 5, changes: 15 },
+      ],
+      changedFiles: 1,
+    };
+    const prompt = buildAgenticPrompt(rootFilePR);
+    expect(prompt).toContain('## Convention Scan');
+    // Root-level directory should be represented as '.'
+    expect(prompt).toContain('`./`');
   });
 });

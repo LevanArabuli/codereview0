@@ -1,4 +1,4 @@
-import type { PRData, ReviewContext, RelatedFile } from './types.js';
+import type { PRData, PRFile, ReviewContext, RelatedFile } from './types.js';
 
 /** Valid review mode strings */
 export const REVIEW_MODES = ['strict', 'detailed', 'lenient', 'balanced'] as const;
@@ -280,6 +280,36 @@ ${JSON_RESPONSE_INSTRUCTION}`;
 }
 
 /**
+ * Build convention scan instructions from changed files.
+ * Extracts unique directories and instructs Claude to read nearby files
+ * to understand codebase conventions before reviewing.
+ */
+function buildConventionScanInstructions(changedFiles: PRFile[]): string {
+  const dirs = [...new Set(changedFiles.map(f => {
+    const parts = f.filename.split('/');
+    parts.pop();
+    return parts.join('/') || '.';
+  }))];
+  const dirList = dirs.map(d => '- `' + d + '/`').join('\n');
+
+  return `## Convention Scan
+
+Before reviewing the diff, read 2-3 existing files in or near the directories containing the changed files to understand the codebase's conventions:
+
+${dirList}
+
+Identify structural patterns in these files:
+- **Naming conventions**: How are functions, classes, constants, and files named?
+- **Error handling patterns**: Does the codebase use custom error classes, error codes, or raw throws?
+- **Import organization**: Are imports grouped (external first, then internal)? Are there barrel files?
+- **Module structure**: How are exports organized? Are there consistent patterns for default vs named exports?
+
+Do NOT look for style conventions (indentation, semicolons, quotes) -- those are the linter's job.
+
+When you find a convention violation in the PR changes, your finding description MUST reference the established pattern with specific file:line evidence. For example: "This module uses throw new AppError(...) for error handling (see auth.ts:45, db.ts:32), but this function uses raw throw."`;
+}
+
+/**
  * Build a unified agentic prompt that guides Claude to both analyze the PR diff
  * AND explore the codebase for cross-file issues in a single session.
  *
@@ -354,6 +384,8 @@ Your role is READ-ONLY analysis. Report findings, do not fix them.
 - NEVER run any command that creates, deletes, or modifies GitHub resources
 
 Read the diff carefully, then explore the codebase to understand how these changes interact with existing code.
+
+${buildConventionScanInstructions(prData.files)}
 
 <pr_metadata>
 Title: ${prData.title}
