@@ -215,6 +215,12 @@ describe('analyzeTeamDeep', () => {
   });
 
   it('handles partial failure in deep mode', async () => {
+    // Use distinct files to prevent dedup from collapsing findings
+    const aspectFiles: Record<string, string> = {
+      security: 'src/auth.ts',
+      performance: 'src/cache.ts',
+      quality: 'src/utils.ts',
+    };
     mockAnalyzeAgentic.mockImplementation(
       (
         _pr: PRData, _clone: string, _model: string | undefined,
@@ -223,7 +229,7 @@ describe('analyzeTeamDeep', () => {
         if (aspect === 'tests') {
           return Promise.reject(new Error('Tests agent timed out'));
         }
-        return Promise.resolve(mockResult([makeFinding({ description: `Deep from ${aspect}` })]));
+        return Promise.resolve(mockResult([makeFinding({ file: aspectFiles[aspect], description: `Deep from ${aspect}` })]));
       }
     );
 
