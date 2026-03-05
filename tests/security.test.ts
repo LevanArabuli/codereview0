@@ -342,3 +342,29 @@ describe('CLN - Cleanup', () => {
     expect(source).toContain('0o700');
   });
 });
+
+// ─── SEC: Extended Security (Phase 01 additions) ─────────────────────────────
+
+describe('SEC - filterEnv ANTHROPIC_BASE_URL', () => {
+  it('filterEnv strips ANTHROPIC_BASE_URL from environment', () => {
+    const source = readFileSync(join(SRC_DIR, 'analyzer.ts'), 'utf-8');
+    expect(source).toContain("'ANTHROPIC_BASE_URL'");
+    // Verify it appears in the DANGEROUS_EXACT set context
+    expect(source).toMatch(/DANGEROUS_EXACT.*=.*new Set\(\[.*'ANTHROPIC_BASE_URL'/s);
+  });
+
+  it('filterEnv is exported from analyzer.ts', () => {
+    const source = readFileSync(join(SRC_DIR, 'analyzer.ts'), 'utf-8');
+    expect(source).toMatch(/export\s+function\s+filterEnv/);
+  });
+
+  it('AnalysisResult type is exported from analyzer.ts', () => {
+    const source = readFileSync(join(SRC_DIR, 'analyzer.ts'), 'utf-8');
+    expect(source).toMatch(/export\s+interface\s+AnalysisResult/);
+  });
+
+  it('scrubSecrets is used in analyzer.ts for credential safety', () => {
+    const source = readFileSync(join(SRC_DIR, 'analyzer.ts'), 'utf-8');
+    expect(source).toContain('scrubSecrets');
+  });
+});
