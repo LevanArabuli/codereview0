@@ -35,7 +35,7 @@ const DANGEROUS_PREFIXES = [
 ];
 
 /** Exact env var names to always strip */
-const DANGEROUS_EXACT = new Set(['DATABASE_URL', 'REDIS_URL']);
+const DANGEROUS_EXACT = new Set(['DATABASE_URL', 'REDIS_URL', 'ANTHROPIC_BASE_URL']);
 
 /** Env vars to keep even if they match a dangerous prefix */
 const KEEP_LIST = new Set(['ANTHROPIC_API_KEY', 'GH_TOKEN', 'GITHUB_TOKEN']);
@@ -45,7 +45,7 @@ const KEEP_LIST = new Set(['ANTHROPIC_API_KEY', 'GH_TOKEN', 'GITHUB_TOKEN']);
  * Strips known-dangerous env vars (cloud credentials, DB URLs, CI secrets)
  * while keeping vars required for Claude CLI and GitHub operations.
  */
-function filterEnv(): NodeJS.ProcessEnv {
+export function filterEnv(): NodeJS.ProcessEnv {
   const filtered: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (KEEP_LIST.has(key)) {
@@ -84,7 +84,7 @@ export interface AnalysisMeta {
 }
 
 /** Structured analysis result with findings and model identification */
-interface AnalysisResult {
+export interface AnalysisResult {
   findings: ReviewFinding[];
   model: string;
   meta?: AnalysisMeta;
