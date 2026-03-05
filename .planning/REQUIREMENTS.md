@@ -12,12 +12,12 @@
 - [ ] **ORCH-03**: Parallel review works in quick mode (lead session receives PR diff, dispatches to subagents)
 - [ ] **ORCH-04**: Parallel review works in deep mode (lead session has cloned repo access, dispatches to subagents)
 - [ ] **ORCH-05**: Tool gracefully degrades to single-agent review when parallel mode is opted out via `--no-team` flag
-- [ ] **ORCH-06**: Each aspect agent receives a focused, expert-scoped prompt for its domain (not a generalist prompt)
+- [x] **ORCH-06**: Each aspect agent receives a focused, expert-scoped prompt for its domain (not a generalist prompt)
 
 ### Finding Synthesis
 
 - [ ] **SYNTH-01**: Tool deduplicates findings across aspects using file + line + description similarity
-- [ ] **SYNTH-02**: `ReviewFinding` schema has optional `aspect` field (`'security' | 'performance' | 'quality' | 'tests'`)
+- [x] **SYNTH-02**: `ReviewFinding` schema has optional `aspect` field (`'security' | 'performance' | 'quality' | 'tests'`)
 - [ ] **SYNTH-03**: All aspect findings merge into a single `ReviewFinding[]` array (backwards-compatible with existing output)
 - [ ] **SYNTH-04**: Terminal output shows aspect summary headers with finding counts ("Security: 3 findings", "Performance: no issues")
 
@@ -28,8 +28,8 @@
 
 ### Security
 
-- [ ] **SEC-01**: `filterEnv()` extended to scrub `ANTHROPIC_BASE_URL` from subprocess environment
-- [ ] **SEC-02**: Credential scrubbing (`scrubSecrets()`) applied to all 4 agent outputs before display
+- [x] **SEC-01**: `filterEnv()` extended to scrub `ANTHROPIC_BASE_URL` from subprocess environment
+- [x] **SEC-02**: Credential scrubbing (`scrubSecrets()`) applied to all 4 agent outputs before display
 
 ## v2 Requirements
 
@@ -64,15 +64,15 @@
 | ORCH-03 | Phase 1 | Pending |
 | ORCH-04 | Phase 1 | Pending |
 | ORCH-05 | Phase 1 | Pending |
-| ORCH-06 | Phase 1 | Pending |
+| ORCH-06 | Phase 1 | Complete |
 | SYNTH-01 | Phase 1 | Pending |
-| SYNTH-02 | Phase 1 | Pending |
+| SYNTH-02 | Phase 1 | Complete |
 | SYNTH-03 | Phase 1 | Pending |
 | SYNTH-04 | Phase 2 | Pending |
 | OUT-01 | Phase 2 | Pending |
 | OUT-02 | Phase 2 | Pending |
-| SEC-01 | Phase 1 | Pending |
-| SEC-02 | Phase 1 | Pending |
+| SEC-01 | Phase 1 | Complete |
+| SEC-02 | Phase 1 | Complete |
 
 **Coverage:**
 - v1 requirements: 14 total

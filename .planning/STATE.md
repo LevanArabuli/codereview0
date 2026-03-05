@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-stopped_at: Phase 1 planned (3 plans, 3 waves, verification passed)
-last_updated: "2026-03-05T10:31:24.378Z"
-last_activity: 2026-03-05 — Roadmap revised to 2 phases (schema/prompt foundation merged into orchestration phase)
+status: executing
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-03-05T10:40:07.369Z"
+last_activity: 2026-03-05 — Completed Plan 01-01 (Schema/Prompt/Security Foundation)
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 ## Current Position
 
 Phase: 1 of 2 (Orchestration Foundation)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-03-05 — Roadmap revised to 2 phases (schema/prompt foundation merged into orchestration phase)
+Plan: 1 of 3 in current phase
+Status: In Progress
+Last activity: 2026-03-05 — Completed Plan 01-01 (Schema/Prompt/Security Foundation)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -50,6 +50,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 01 P01 | 3min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -62,6 +63,9 @@ Recent decisions affecting current work:
 - [Roadmap]: Security hardening (filterEnv ANTHROPIC_BASE_URL) placed in Phase 1 alongside first subprocess calls, not deferred
 - [Roadmap]: Schema/prompt foundation merged with orchestration into Phase 1 — natural dependency, no delivery value in splitting them
 - [Roadmap]: Output extensions isolated to Phase 2 — pure functions with no subprocess concerns
+- [Phase 01]: AspectType canonically defined in schemas.ts via z.infer, re-exported from prompt.ts (single source of truth)
+- [Phase 01]: ASPECT_OVERLAYS kept as private module constant following MODE_OVERLAYS pattern
+- [Phase 01]: filterEnv exported for orchestrator reuse rather than duplicating env filtering logic
 
 ### Pending Todos
 
@@ -74,6 +78,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05T10:31:24.375Z
-Stopped at: Phase 1 planned (3 plans, 3 waves, verification passed)
-Resume file: .planning/phases/01-orchestration-foundation/01-01-PLAN.md
+Last session: 2026-03-05T10:40:07.367Z
+Stopped at: Completed 01-01-PLAN.md
+Resume file: None
