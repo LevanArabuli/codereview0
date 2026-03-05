@@ -30,7 +30,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   6. Running with `--no-team` produces a single-agent review and prints a message confirming single-agent mode
   7. `filterEnv()` strips `ANTHROPIC_BASE_URL` from all subprocess environments, and a security test in `security.test.ts` covers this boundary
   8. Findings that appear in multiple aspects are deduplicated in the merged output (same file, line, and description does not appear twice)
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Schema, prompt, and security foundations (aspect field, prompt overlays, filterEnv)
+- [ ] 01-02-PLAN.md — Orchestrator core (fan-out, dedup, merge, partial failure)
+- [ ] 01-03-PLAN.md — CLI wiring (--no-team flag, orchestrator routing, fallback)
 
 ### Phase 2: Output Integration
 **Goal**: Users see aspect-grouped findings in the terminal with progress indicators during the review and summary counts per aspect
@@ -49,5 +54,5 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Orchestration Foundation | 0/TBD | Not started | - |
+| 1. Orchestration Foundation | 0/3 | Not started | - |
 | 2. Output Integration | 0/TBD | Not started | - |
