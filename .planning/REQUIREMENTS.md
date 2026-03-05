@@ -59,26 +59,26 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ORCH-01 | — | Pending |
-| ORCH-02 | — | Pending |
-| ORCH-03 | — | Pending |
-| ORCH-04 | — | Pending |
-| ORCH-05 | — | Pending |
-| ORCH-06 | — | Pending |
-| SYNTH-01 | — | Pending |
-| SYNTH-02 | — | Pending |
-| SYNTH-03 | — | Pending |
-| SYNTH-04 | — | Pending |
-| OUT-01 | — | Pending |
-| OUT-02 | — | Pending |
-| SEC-01 | — | Pending |
-| SEC-02 | — | Pending |
+| ORCH-01 | Phase 1 | Pending |
+| ORCH-02 | Phase 1 | Pending |
+| ORCH-03 | Phase 1 | Pending |
+| ORCH-04 | Phase 1 | Pending |
+| ORCH-05 | Phase 1 | Pending |
+| ORCH-06 | Phase 1 | Pending |
+| SYNTH-01 | Phase 1 | Pending |
+| SYNTH-02 | Phase 1 | Pending |
+| SYNTH-03 | Phase 1 | Pending |
+| SYNTH-04 | Phase 2 | Pending |
+| OUT-01 | Phase 2 | Pending |
+| OUT-02 | Phase 2 | Pending |
+| SEC-01 | Phase 1 | Pending |
+| SEC-02 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 14 total
-- Mapped to phases: 0
-- Unmapped: 14
+- Mapped to phases: 14
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-05*
-*Last updated: 2026-03-05 after initial definition*
+*Last updated: 2026-03-05 after roadmap revision to 2 phases*
