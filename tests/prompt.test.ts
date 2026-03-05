@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { getModeOverlay, buildPrompt, buildAgenticPrompt, REVIEW_MODES } from '../src/prompt.js';
+import { getModeOverlay, buildPrompt, buildAgenticPrompt, REVIEW_MODES, ASPECT_TYPES, buildAspectPrompt, buildAspectAgenticPrompt } from '../src/prompt.js';
 import type { ReviewMode } from '../src/prompt.js';
 import type { PRData } from '../src/types.js';
+import { ReviewFindingSchema } from '../src/schemas.js';
 
 const mockPR: PRData = {
   number: 1,
@@ -247,5 +248,156 @@ describe('buildAgenticPrompt', () => {
     expect(prompt).toContain('Exploration is unlimited');
     expect(prompt).not.toMatch(/at most/i);
     expect(prompt).not.toMatch(/file budget/i);
+  });
+});
+
+// ─── Aspect Schema Tests ──────────────────────────────────────────────────────
+
+describe('ReviewFindingSchema aspect field', () => {
+  const baseFinding = {
+    file: 'src/test.ts',
+    line: 10,
+    severity: 'bug' as const,
+    confidence: 'high' as const,
+    category: 'null-safety',
+    description: 'Possible null dereference.',
+  };
+
+  it('accepts a finding with aspect: "security"', () => {
+    const result = ReviewFindingSchema.safeParse({ ...baseFinding, aspect: 'security' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a finding with aspect: "performance"', () => {
+    const result = ReviewFindingSchema.safeParse({ ...baseFinding, aspect: 'performance' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a finding with aspect: "quality"', () => {
+    const result = ReviewFindingSchema.safeParse({ ...baseFinding, aspect: 'quality' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a finding with aspect: "tests"', () => {
+    const result = ReviewFindingSchema.safeParse({ ...baseFinding, aspect: 'tests' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a finding WITHOUT an aspect field (backwards compatible)', () => {
+    const result = ReviewFindingSchema.safeParse(baseFinding);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a finding with aspect: "invalid"', () => {
+    const result = ReviewFindingSchema.safeParse({ ...baseFinding, aspect: 'invalid' });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ─── Aspect Types and Overlays ────────────────────────────────────────────────
+
+describe('ASPECT_TYPES', () => {
+  it('contains exactly four aspect types', () => {
+    expect(ASPECT_TYPES).toHaveLength(4);
+  });
+
+  it('includes security, performance, quality, and tests', () => {
+    expect(ASPECT_TYPES).toContain('security');
+    expect(ASPECT_TYPES).toContain('performance');
+    expect(ASPECT_TYPES).toContain('quality');
+    expect(ASPECT_TYPES).toContain('tests');
+  });
+});
+
+describe('Aspect overlays domain scoping', () => {
+  it('security overlay contains domain-specific keywords', () => {
+    const prompt = buildAspectPrompt(mockPR, 'balanced', 'security');
+    expect(prompt).toMatch(/vulnerabilities/i);
+    expect(prompt).toMatch(/injection/i);
+    expect(prompt).toMatch(/authentication/i);
+  });
+
+  it('performance overlay contains domain-specific keywords', () => {
+    const prompt = buildAspectPrompt(mockPR, 'balanced', 'performance');
+    expect(prompt).toMatch(/bottlenecks/i);
+    expect(prompt).toMatch(/allocations/i);
+    expect(prompt).toMatch(/memory/i);
+  });
+
+  it('quality overlay contains domain-specific keywords', () => {
+    const prompt = buildAspectPrompt(mockPR, 'balanced', 'quality');
+    expect(prompt).toMatch(/readability/i);
+    expect(prompt).toMatch(/maintainability/i);
+    expect(prompt).toMatch(/naming/i);
+  });
+
+  it('tests overlay contains domain-specific keywords', () => {
+    const prompt = buildAspectPrompt(mockPR, 'balanced', 'tests');
+    expect(prompt).toMatch(/test coverage/i);
+    expect(prompt).toMatch(/edge case/i);
+    expect(prompt).toMatch(/error paths/i);
+  });
+
+  it('aspect overlays do NOT restate JSON output format instructions', () => {
+    for (const aspect of ASPECT_TYPES) {
+      const withAspect = buildAspectPrompt(mockPR, 'balanced', aspect);
+      const withoutAspect = buildAspectPrompt(mockPR, 'balanced');
+      // The aspect overlay part (the diff) should not contain JSON format instructions
+      const overlayPart = withAspect.slice(withoutAspect.length);
+      expect(overlayPart).not.toContain('IMPORTANT: Respond with ONLY a valid JSON');
+      expect(overlayPart).not.toContain('"findings"');
+    }
+  });
+});
+
+// ─── buildAspectPrompt ────────────────────────────────────────────────────────
+
+describe('buildAspectPrompt', () => {
+  it('returns base prompt + mode overlay + aspect overlay when all three provided', () => {
+    const prompt = buildAspectPrompt(mockPR, 'strict', 'security');
+    // Should contain base prompt content
+    expect(prompt).toContain('Test PR');
+    // Should contain mode overlay
+    expect(prompt).toContain('REVIEW MODE');
+    // Should contain aspect overlay
+    expect(prompt).toMatch(/ASPECT FOCUS/i);
+  });
+
+  it('without aspect returns same as buildPrompt (backwards compatible)', () => {
+    const aspectPrompt = buildAspectPrompt(mockPR, 'strict');
+    const regularPrompt = buildPrompt(mockPR, 'strict');
+    expect(aspectPrompt).toBe(regularPrompt);
+  });
+
+  it('without aspect and without mode returns same as buildPrompt with no args', () => {
+    const aspectPrompt = buildAspectPrompt(mockPR);
+    const regularPrompt = buildPrompt(mockPR);
+    expect(aspectPrompt).toBe(regularPrompt);
+  });
+});
+
+// ─── buildAspectAgenticPrompt ─────────────────────────────────────────────────
+
+describe('buildAspectAgenticPrompt', () => {
+  it('returns agentic base prompt + mode overlay + aspect overlay', () => {
+    const prompt = buildAspectAgenticPrompt(mockPR, 'strict', 'security');
+    // Should contain agentic-specific content
+    expect(prompt).toContain('## Codebase Exploration');
+    // Should contain mode overlay
+    expect(prompt).toContain('REVIEW MODE');
+    // Should contain aspect overlay
+    expect(prompt).toMatch(/ASPECT FOCUS/i);
+  });
+
+  it('without aspect returns same as buildAgenticPrompt (backwards compatible)', () => {
+    const aspectPrompt = buildAspectAgenticPrompt(mockPR, 'strict');
+    const regularPrompt = buildAgenticPrompt(mockPR, 'strict');
+    expect(aspectPrompt).toBe(regularPrompt);
+  });
+
+  it('without aspect and without mode returns same as buildAgenticPrompt with no args', () => {
+    const aspectPrompt = buildAspectAgenticPrompt(mockPR);
+    const regularPrompt = buildAgenticPrompt(mockPR);
+    expect(aspectPrompt).toBe(regularPrompt);
   });
 });
