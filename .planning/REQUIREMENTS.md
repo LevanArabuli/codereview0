@@ -7,18 +7,18 @@
 
 ### Parallel Orchestration
 
-- [ ] **ORCH-01**: Tool spawns a single `claude` CLI session whose prompt instructs it to use built-in subagents (Task tool) to run 4 parallel aspect reviewers (security, performance, code quality, test coverage)
-- [ ] **ORCH-02**: The lead Claude session manages subagent lifecycle internally; partial aspect failure does not abort the full review
-- [ ] **ORCH-03**: Parallel review works in quick mode (lead session receives PR diff, dispatches to subagents)
-- [ ] **ORCH-04**: Parallel review works in deep mode (lead session has cloned repo access, dispatches to subagents)
+- [x] **ORCH-01**: Tool spawns a single `claude` CLI session whose prompt instructs it to use built-in subagents (Task tool) to run 4 parallel aspect reviewers (security, performance, code quality, test coverage)
+- [x] **ORCH-02**: The lead Claude session manages subagent lifecycle internally; partial aspect failure does not abort the full review
+- [x] **ORCH-03**: Parallel review works in quick mode (lead session receives PR diff, dispatches to subagents)
+- [x] **ORCH-04**: Parallel review works in deep mode (lead session has cloned repo access, dispatches to subagents)
 - [ ] **ORCH-05**: Tool gracefully degrades to single-agent review when parallel mode is opted out via `--no-team` flag
 - [x] **ORCH-06**: Each aspect agent receives a focused, expert-scoped prompt for its domain (not a generalist prompt)
 
 ### Finding Synthesis
 
-- [ ] **SYNTH-01**: Tool deduplicates findings across aspects using file + line + description similarity
+- [x] **SYNTH-01**: Tool deduplicates findings across aspects using file + line + description similarity
 - [x] **SYNTH-02**: `ReviewFinding` schema has optional `aspect` field (`'security' | 'performance' | 'quality' | 'tests'`)
-- [ ] **SYNTH-03**: All aspect findings merge into a single `ReviewFinding[]` array (backwards-compatible with existing output)
+- [x] **SYNTH-03**: All aspect findings merge into a single `ReviewFinding[]` array (backwards-compatible with existing output)
 - [ ] **SYNTH-04**: Terminal output shows aspect summary headers with finding counts ("Security: 3 findings", "Performance: no issues")
 
 ### Output
@@ -59,15 +59,15 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ORCH-01 | Phase 1 | Pending |
-| ORCH-02 | Phase 1 | Pending |
-| ORCH-03 | Phase 1 | Pending |
-| ORCH-04 | Phase 1 | Pending |
+| ORCH-01 | Phase 1 | Complete |
+| ORCH-02 | Phase 1 | Complete |
+| ORCH-03 | Phase 1 | Complete |
+| ORCH-04 | Phase 1 | Complete |
 | ORCH-05 | Phase 1 | Pending |
 | ORCH-06 | Phase 1 | Complete |
-| SYNTH-01 | Phase 1 | Pending |
+| SYNTH-01 | Phase 1 | Complete |
 | SYNTH-02 | Phase 1 | Complete |
-| SYNTH-03 | Phase 1 | Pending |
+| SYNTH-03 | Phase 1 | Complete |
 | SYNTH-04 | Phase 2 | Pending |
 | OUT-01 | Phase 2 | Pending |
 | OUT-02 | Phase 2 | Pending |
