@@ -11,7 +11,7 @@
 - [x] **ORCH-02**: The lead Claude session manages subagent lifecycle internally; partial aspect failure does not abort the full review
 - [x] **ORCH-03**: Parallel review works in quick mode (lead session receives PR diff, dispatches to subagents)
 - [x] **ORCH-04**: Parallel review works in deep mode (lead session has cloned repo access, dispatches to subagents)
-- [ ] **ORCH-05**: Tool gracefully degrades to single-agent review when parallel mode is opted out via `--no-team` flag
+- [x] **ORCH-05**: Tool gracefully degrades to single-agent review when parallel mode is opted out via `--no-team` flag
 - [x] **ORCH-06**: Each aspect agent receives a focused, expert-scoped prompt for its domain (not a generalist prompt)
 
 ### Finding Synthesis
@@ -63,7 +63,7 @@
 | ORCH-02 | Phase 1 | Complete |
 | ORCH-03 | Phase 1 | Complete |
 | ORCH-04 | Phase 1 | Complete |
-| ORCH-05 | Phase 1 | Pending |
+| ORCH-05 | Phase 1 | Complete |
 | ORCH-06 | Phase 1 | Complete |
 | SYNTH-01 | Phase 1 | Complete |
 | SYNTH-02 | Phase 1 | Complete |
