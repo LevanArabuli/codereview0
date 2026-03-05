@@ -4,8 +4,10 @@ import { parsePRUrl } from './url-parser.js';
 import { checkPrerequisites } from './prerequisites.js';
 import { createOctokit, fetchPRData, postReview } from './github.js';
 import { printPRSummary, printErrors, printDebug, printModel, printMode, printMeta, formatDuration, estimateTokens, printProgress, printProgressDone, printAnalysisSummary, printFindings } from './output.js';
-import { buildPrompt, type ReviewMode } from './prompt.js';
+import { buildPrompt, type ReviewMode, ASPECT_TYPES } from './prompt.js';
 import { analyzeDiff, analyzeAgentic } from './analyzer.js';
+import { analyzeTeamQuick, analyzeTeamDeep } from './orchestrator.js';
+import type { TeamResult } from './orchestrator.js';
 import { cloneRepo, getClonePath, promptCleanup } from './cloner.js';
 import { parseDiffHunks } from './diff-parser.js';
 import { partitionFindings, buildReviewBody } from './review-builder.js';
@@ -114,13 +116,14 @@ program
   .option('--deep', 'Deep review: clone repo and explore codebase for cross-file impacts')
   .option('--post', 'Post review to GitHub PR')
   .option('--html', 'Generate HTML report and open in browser')
+  .option('--no-team', 'Run single-agent review instead of parallel team review')
   .option('--model <model-id>', 'Claude model to use (e.g., sonnet, opus, haiku, or full model ID)')
   .addOption(
     new Option('--mode <mode>', 'Review mode: strict, detailed, lenient, balanced')
       .choices(['strict', 'detailed', 'lenient', 'balanced'])
       .default('balanced')
   )
-  .action(async (prUrl: string, options: { verbose?: boolean; quick?: boolean; deep?: boolean; post?: boolean; html?: boolean; model?: string; mode: ReviewMode }) => {
+  .action(async (prUrl: string, options: { verbose?: boolean; quick?: boolean; deep?: boolean; post?: boolean; html?: boolean; team?: boolean; model?: string; mode: ReviewMode }) => {
     // 1. Check prerequisites (collect all failures, report at once)
     const failures = checkPrerequisites();
     if (failures.length > 0) {
@@ -189,17 +192,89 @@ program
       }
 
       if (cloneSucceeded) {
-        // 4b. Agentic review (single-pass deep analysis)
-        console.log(pc.dim('Running deep review...'));
-        const analyzeStart = performance.now();
-        const result = await analyzeAgentic(prData, clonePath, options.model, options.mode, options.verbose);
-        const analyzeDuration = performance.now() - analyzeStart;
-        findings = result.findings;
-        printModel(result.model);
-        if (options.verbose) {
-          printDebug(`Analyze (deep): ${formatDuration(analyzeDuration)}`);
-          if (result.meta) {
-            printMeta(result.meta);
+        if (options.team !== false) {
+          // Team deep mode (DEFAULT): 4 parallel aspect agents
+          console.log(pc.dim('Running team review...'));
+          const analyzeStart = performance.now();
+          let teamResult: TeamResult;
+          try {
+            teamResult = await analyzeTeamDeep(prData, clonePath, options.model, options.mode, options.verbose);
+          } catch (error: unknown) {
+            // Orchestrator itself threw -- fall back to single-agent
+            console.error(pc.yellow('Team review failed -- falling back to single-agent review'));
+            console.error(pc.dim('  ' + sanitizeError(error)));
+            try {
+              const result = await analyzeAgentic(prData, clonePath, options.model, options.mode, options.verbose);
+              findings = result.findings;
+              printModel(result.model);
+            } catch (fallbackError: unknown) {
+              console.error(pc.red('Analysis failed'));
+              console.error(sanitizeError(fallbackError));
+              process.exit(EXIT_ANALYSIS_ERROR);
+            }
+            const analyzeDuration = performance.now() - analyzeStart;
+            if (options.verbose) {
+              printDebug(`Analyze (deep): ${formatDuration(analyzeDuration)}`);
+            }
+            await handlePostAnalysis(findings, prData, parsed, octokit, options);
+            // Cleanup cloned repo
+            try { await promptCleanup(clonePath); } catch { /* Cleanup failure should never crash */ }
+            return;
+          }
+          const analyzeDuration = performance.now() - analyzeStart;
+
+          // Per-aspect status display
+          for (const aspect of ASPECT_TYPES) {
+            const status = teamResult.aspectStatus[aspect];
+            const label = aspect.charAt(0).toUpperCase() + aspect.slice(1);
+            const statusText = status === 'done' ? pc.green('done') : pc.yellow('failed');
+            console.log(pc.dim(`  ${label}: `) + statusText);
+          }
+
+          if (teamResult.allFailed) {
+            // All 4 aspect agents failed -- fall back to single-agent generalist review
+            console.log(pc.yellow('All aspect agents failed -- falling back to single-agent review'));
+            try {
+              const result = await analyzeAgentic(prData, clonePath, options.model, options.mode, options.verbose);
+              findings = result.findings;
+              printModel(result.model);
+            } catch (fallbackError: unknown) {
+              console.error(pc.red('Analysis failed'));
+              console.error(sanitizeError(fallbackError));
+              process.exit(EXIT_ANALYSIS_ERROR);
+            }
+          } else {
+            // Partial or full success
+            for (const aspect of ASPECT_TYPES) {
+              if (teamResult.aspectStatus[aspect] === 'failed') {
+                const label = aspect.charAt(0).toUpperCase() + aspect.slice(1);
+                console.log(pc.yellow(`Warning: ${label} aspect failed -- partial results`));
+              }
+            }
+            findings = teamResult.findings;
+            if (options.verbose) {
+              printDebug(`Findings: ${teamResult.rawCount} raw, ${teamResult.findings.length} after dedup`);
+            }
+            printModel(teamResult.model);
+          }
+
+          if (options.verbose) {
+            printDebug(`Analyze (deep): ${formatDuration(analyzeDuration)}`);
+          }
+        } else {
+          // Single-agent deep mode (--no-team)
+          console.log(pc.dim('Single-agent mode'));
+          console.log(pc.dim('Running deep review...'));
+          const analyzeStart = performance.now();
+          const result = await analyzeAgentic(prData, clonePath, options.model, options.mode, options.verbose);
+          const analyzeDuration = performance.now() - analyzeStart;
+          findings = result.findings;
+          printModel(result.model);
+          if (options.verbose) {
+            printDebug(`Analyze (deep): ${formatDuration(analyzeDuration)}`);
+            if (result.meta) {
+              printMeta(result.meta);
+            }
           }
         }
       } else {
@@ -247,28 +322,100 @@ program
     } else {
       // Quick mode (default): analyze diff only
 
-      // 4. Analyze diff with progress and timing
-      const quickPrompt = buildPrompt(prData, options.mode);
-      const analyzeStart = performance.now();
-      try {
-        printProgress('Analyzing diff...');
-        const result = await analyzeDiff(prData, options.model, options.mode);
-        printProgressDone();
-        findings = result.findings;
-
+      if (options.team !== false) {
+        // Team quick mode (DEFAULT): 4 parallel aspect agents
+        console.log(pc.dim('Running team review...'));
+        const analyzeStart = performance.now();
+        let teamResult: TeamResult;
+        try {
+          teamResult = await analyzeTeamQuick(prData, options.model, options.mode);
+        } catch (error: unknown) {
+          // Orchestrator itself threw -- fall back to single-agent
+          console.error(pc.yellow('Team review failed -- falling back to single-agent review'));
+          console.error(pc.dim('  ' + sanitizeError(error)));
+          try {
+            const result = await analyzeDiff(prData, options.model, options.mode);
+            findings = result.findings;
+            printModel(result.model);
+          } catch (fallbackError: unknown) {
+            console.error(pc.red('Analysis failed'));
+            console.error(sanitizeError(fallbackError));
+            process.exit(EXIT_ANALYSIS_ERROR);
+          }
+          const analyzeDuration = performance.now() - analyzeStart;
+          if (options.verbose) {
+            printDebug(`Analyze: ${formatDuration(analyzeDuration)}`);
+          }
+          await handlePostAnalysis(findings, prData, parsed, octokit, options);
+          return;
+        }
         const analyzeDuration = performance.now() - analyzeStart;
 
-        // Model line always visible
-        printModel(result.model);
+        // Per-aspect status display
+        for (const aspect of ASPECT_TYPES) {
+          const status = teamResult.aspectStatus[aspect];
+          const label = aspect.charAt(0).toUpperCase() + aspect.slice(1);
+          const statusText = status === 'done' ? pc.green('done') : pc.yellow('failed');
+          console.log(pc.dim(`  ${label}: `) + statusText);
+        }
+
+        if (teamResult.allFailed) {
+          // All 4 aspect agents failed -- fall back to single-agent generalist review
+          console.log(pc.yellow('All aspect agents failed -- falling back to single-agent review'));
+          try {
+            const result = await analyzeDiff(prData, options.model, options.mode);
+            findings = result.findings;
+            printModel(result.model);
+          } catch (fallbackError: unknown) {
+            console.error(pc.red('Analysis failed'));
+            console.error(sanitizeError(fallbackError));
+            process.exit(EXIT_ANALYSIS_ERROR);
+          }
+        } else {
+          // Partial or full success
+          for (const aspect of ASPECT_TYPES) {
+            if (teamResult.aspectStatus[aspect] === 'failed') {
+              const label = aspect.charAt(0).toUpperCase() + aspect.slice(1);
+              console.log(pc.yellow(`Warning: ${label} aspect failed -- partial results`));
+            }
+          }
+          findings = teamResult.findings;
+          if (options.verbose) {
+            printDebug(`Findings: ${teamResult.rawCount} raw, ${teamResult.findings.length} after dedup`);
+          }
+          printModel(teamResult.model);
+        }
 
         if (options.verbose) {
-          printDebug(`Analyze: ${formatDuration(analyzeDuration)}, prompt ${estimateTokens(quickPrompt.length)}`);
+          printDebug(`Analyze: ${formatDuration(analyzeDuration)}`);
         }
-      } catch (error: unknown) {
-        console.log(); // newline after progress message
-        console.error(pc.red('Analysis failed'));
-        console.error(sanitizeError(error));
-        process.exit(EXIT_ANALYSIS_ERROR);
+      } else {
+        // Single-agent quick mode (--no-team)
+        console.log(pc.dim('Single-agent mode'));
+
+        // 4. Analyze diff with progress and timing
+        const quickPrompt = buildPrompt(prData, options.mode);
+        const analyzeStart = performance.now();
+        try {
+          printProgress('Analyzing diff...');
+          const result = await analyzeDiff(prData, options.model, options.mode);
+          printProgressDone();
+          findings = result.findings;
+
+          const analyzeDuration = performance.now() - analyzeStart;
+
+          // Model line always visible
+          printModel(result.model);
+
+          if (options.verbose) {
+            printDebug(`Analyze: ${formatDuration(analyzeDuration)}, prompt ${estimateTokens(quickPrompt.length)}`);
+          }
+        } catch (error: unknown) {
+          console.log(); // newline after progress message
+          console.error(pc.red('Analysis failed'));
+          console.error(sanitizeError(error));
+          process.exit(EXIT_ANALYSIS_ERROR);
+        }
       }
 
       // 5. Shared post-analysis: terminal output, HTML report, verbose counts, GitHub post
