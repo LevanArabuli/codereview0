@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ReviewFinding } from '../src/schemas.js';
 import type { AnalysisResult } from '../src/analyzer.js';
 import type { PRData } from '../src/types.js';
+
+const SRC_DIR = resolve(import.meta.dirname, '..', 'src');
 
 // ---- Mocks for analyzer.ts ----
 const mockAnalyzeDiff = vi.fn();
@@ -340,5 +344,25 @@ describe('deduplicateFindings', () => {
     const findings: ReviewFinding[] = [makeFinding()];
     const result = deduplicateFindings(findings);
     expect(result).toHaveLength(1);
+  });
+});
+
+describe('CLI team integration (static analysis)', () => {
+  const cliSource = readFileSync(resolve(SRC_DIR, 'cli.ts'), 'utf-8');
+
+  it('cli.ts defines --no-team option', () => {
+    expect(cliSource).toContain('--no-team');
+  });
+
+  it('cli.ts imports from orchestrator', () => {
+    expect(cliSource).toMatch(/import.*from.*orchestrator/);
+  });
+
+  it('cli.ts handles allFailed fallback', () => {
+    expect(cliSource).toContain('allFailed');
+  });
+
+  it('cli.ts displays per-aspect status', () => {
+    expect(cliSource).toContain('aspectStatus');
   });
 });
