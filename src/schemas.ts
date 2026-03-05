@@ -7,6 +7,12 @@ const RelatedLocationSchema = z.object({
   reason: z.string(),
 });
 
+/** Schema for the aspect type enum used in multi-aspect review */
+export const AspectTypeSchema = z.enum(['security', 'performance', 'quality', 'tests']);
+
+/** The aspect type derived from the Zod schema (canonical definition) */
+export type AspectType = z.infer<typeof AspectTypeSchema>;
+
 /** Schema for a single review finding */
 export const ReviewFindingSchema = z.object({
   file: z.string(),
@@ -18,6 +24,7 @@ export const ReviewFindingSchema = z.object({
   description: z.string(),
   suggestedFix: z.string().optional(),
   relatedLocations: z.array(RelatedLocationSchema).optional(),
+  aspect: AspectTypeSchema.optional(),
 });
 
 /** Schema for the complete review result (flat array of findings) */

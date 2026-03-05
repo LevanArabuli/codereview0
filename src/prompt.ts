@@ -1,4 +1,7 @@
 import type { PRData } from './types.js';
+import type { AspectType } from './schemas.js';
+
+export type { AspectType } from './schemas.js';
 
 /** Valid review mode strings */
 export const REVIEW_MODES = ['strict', 'detailed', 'lenient', 'balanced'] as const;
@@ -70,6 +73,20 @@ const FINDING_FORMAT_INSTRUCTIONS = `For each issue found, provide:
 const JSON_RESPONSE_INSTRUCTION = `IMPORTANT: Respond with ONLY a valid JSON object matching this exact structure — no explanation, no markdown, no tool calls:
 {"findings": [{"file": "string", "line": number, "severity": "bug"|"security"|"suggestion"|"nitpick", "confidence": "high"|"medium"|"low", "category": "string", "description": "string"}]}
 Optional fields per finding: "endLine" (number), "suggestedFix" (string), "relatedLocations" ([{"file": "string", "line": number, "reason": "string"}])`;
+
+/** Valid aspect type strings for multi-aspect review */
+export const ASPECT_TYPES = ['security', 'performance', 'quality', 'tests'] as const;
+
+/** Prompt overlay paragraphs for each aspect, constraining the review to a single expert domain */
+const ASPECT_OVERLAYS: Record<AspectType, string> = {
+  security: `\n\nASPECT FOCUS -- SECURITY EXPERT: You are a security specialist reviewing this code for vulnerabilities, injection risks, authentication/authorization flaws, data exposure, insecure cryptography, and unsafe patterns. Report ONLY security-relevant findings. Ignore code quality, performance, and test coverage issues -- other specialists handle those.`,
+
+  performance: `\n\nASPECT FOCUS -- PERFORMANCE EXPERT: You are a performance engineer reviewing this code for bottlenecks, unnecessary allocations, O(n^2) algorithms, blocking I/O on hot paths, missing caching opportunities, memory leaks, and inefficient data structures. Report ONLY performance-relevant findings. Ignore security, code quality, and test coverage issues -- other specialists handle those.`,
+
+  quality: `\n\nASPECT FOCUS -- CODE QUALITY EXPERT: You are a code quality specialist reviewing this code for readability, maintainability, design patterns, naming, error handling, code duplication, dead code, and adherence to project conventions. Report ONLY code quality findings. Ignore security vulnerabilities, performance issues, and test coverage gaps -- other specialists handle those.`,
+
+  tests: `\n\nASPECT FOCUS -- TEST COVERAGE EXPERT: You are a testing specialist reviewing this code for test coverage gaps, missing edge case tests, brittle test patterns, untested error paths, and test quality issues. Report ONLY testing-relevant findings. Ignore security, performance, and code quality issues -- other specialists handle those.`,
+};
 
 /**
  * Get the prompt overlay text for a given review mode.
@@ -193,4 +210,28 @@ ${JSON_RESPONSE_INSTRUCTION}`;
 
   const effectiveMode = mode ?? 'balanced';
   return basePrompt + getModeOverlay(effectiveMode);
+}
+
+/**
+ * Build a review prompt with optional aspect overlay for multi-aspect review.
+ *
+ * Composes: base prompt + mode overlay + aspect overlay (if provided).
+ * When aspect is omitted, returns the same result as buildPrompt().
+ */
+export function buildAspectPrompt(prData: PRData, mode?: ReviewMode, aspect?: AspectType): string {
+  const base = buildPrompt(prData, mode);
+  if (!aspect) return base;
+  return base + ASPECT_OVERLAYS[aspect];
+}
+
+/**
+ * Build an agentic review prompt with optional aspect overlay for multi-aspect review.
+ *
+ * Composes: agentic base prompt + mode overlay + aspect overlay (if provided).
+ * When aspect is omitted, returns the same result as buildAgenticPrompt().
+ */
+export function buildAspectAgenticPrompt(prData: PRData, mode?: ReviewMode, aspect?: AspectType): string {
+  const base = buildAgenticPrompt(prData, mode);
+  if (!aspect) return base;
+  return base + ASPECT_OVERLAYS[aspect];
 }
