@@ -9,6 +9,7 @@ Claude-powered reviews for GitHub PRs and local branches. Thorough, configurable
 - 🧠 **Deep mode** - Optionally clones the repo and explores cross-file impacts
 - 💬 **Post to GitHub** - Adds review comments directly on the PR (as pending, so you stay in control)
 - 📄 **HTML reports** - Generates standalone diff reports with inline annotations
+- ⚡ **GitHub Action** - Drop a workflow into any repo and trigger reviews with a `/review` comment
   
 
 <img width="1727" height="1008" alt="codereview output showing annotated diff with findings" src="https://github.com/user-attachments/assets/e91bee0a-2241-43aa-aea0-4fdafa3fae63" />
@@ -94,6 +95,55 @@ codereview branch rc-branch feature/login-refactor --mode strict
 ```
 
 The diff uses merge-base semantics (`git diff base...compare`), so results match what GitHub would show for the same branches in a PR.
+
+## Use as a GitHub Action
+
+Run `codereview` automatically on any PR by commenting `/review` (or `/review deep`). No local install, no laptop required.
+
+### One-time setup in your repo
+
+1. Add `ANTHROPIC_API_KEY` to your repo's secrets (Settings → Secrets and variables → Actions).
+2. Copy [`examples/consumer-workflow.yml`](examples/consumer-workflow.yml) into your repo as `.github/workflows/codereview.yml`.
+3. Pin the action version. Replace `@main` with a release tag once you're ready (e.g. `@v1`).
+
+```yaml
+- uses: LevanArabuli/codereview0@v1
+  with:
+    pr_url: ${{ github.event.issue.pull_request.html_url }}
+    mode: ${{ steps.cmd.outputs.mode }}
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+### What it does
+
+Opens or updates a **pending** review on the PR with inline findings. You still submit the review manually through the GitHub UI — `codereview` never approves, requests changes, or merges anything.
+
+### Action inputs
+
+| Input | Required | Default | Description |
+| --- | --- | --- | --- |
+| `pr_url` | yes | — | PR URL to review |
+| `anthropic_api_key` | yes | — | Anthropic API key for the Claude CLI |
+| `mode` | no | `quick` | `quick` or `deep` |
+| `review_mode` | no | `balanced` | `strict`, `detailed`, `balanced`, or `lenient` |
+| `model` | no | (CLI default) | e.g. `sonnet`, `opus`, `haiku` |
+| `github_token` | no | `${{ github.token }}` | Needs `pull-requests: write` |
+| `claude_code_version` | no | `latest` | `@anthropic-ai/claude-code` version to install |
+
+### Required workflow permissions
+
+```yaml
+permissions:
+  pull-requests: write   # post the pending review
+  issues: read           # read the /review comment
+  contents: read         # checkout in deep mode
+```
+
+Without `pull-requests: write` the action will fail when posting the review.
+
+### Public repos: gate `/review` to trusted commenters
+
+The example workflow only runs when the commenter's `author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR`. Without that gate, anyone with a GitHub account could comment `/review` on your public PR and burn your `ANTHROPIC_API_KEY` credits. On a private repo where every commenter is already trusted, you can drop the check — see the comment in `examples/consumer-workflow.yml`.
 
 ## CLI reference
 
