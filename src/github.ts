@@ -87,8 +87,11 @@ export async function fetchPRData(
 /**
  * Post a code review to a GitHub pull request.
  *
- * Creates a PENDING review by omitting the `event` parameter entirely.
- * The user manually submits the review through the GitHub UI.
+ * Defaults to a PENDING review by omitting the `event` parameter -- the user
+ * manually submits the review through the GitHub UI. Pass `event: 'COMMENT'`
+ * to submit immediately (visible to all PR participants, no approve/reject
+ * verdict). APPROVE, REQUEST_CHANGES, and DISMISS are deliberately disallowed
+ * by the type signature.
  *
  * If a 422 error occurs (invalid comment positions), falls back to posting
  * all findings in the review body with no inline comments.
@@ -103,20 +106,25 @@ export async function postReview(
   headSha: string,
   body: string,
   comments: Array<{ path: string; line: number; side: string; body: string }>,
+  event?: 'COMMENT',
 ): Promise<string> {
-  try {
-    // PENDING state: achieved by OMITTING `event` (not by passing "PENDING")
-    // Valid event values are APPROVE, REQUEST_CHANGES, COMMENT, DISMISS.
-    // Omitting event entirely creates a pending/draft review.
-    const response = await octokit.pulls.createReview({
-      owner,
-      repo,
-      pull_number: prNumber,
-      commit_id: headSha,
-      body,
-      comments,
-    });
+  // Build params once. `event` is only included when truthy so PENDING (the
+  // default) still results in OMITTING the field entirely -- passing
+  // `event: undefined` is rejected by the API.
+  const params: Parameters<typeof octokit.pulls.createReview>[0] = {
+    owner,
+    repo,
+    pull_number: prNumber,
+    commit_id: headSha,
+    body,
+    comments,
+  };
+  if (event) {
+    params.event = event;
+  }
 
+  try {
+    const response = await octokit.pulls.createReview(params);
     return response.data.html_url;
   } catch (error: unknown) {
     // 422 fallback: if inline comments target invalid positions,
@@ -131,10 +139,7 @@ export async function postReview(
       }
 
       const response = await octokit.pulls.createReview({
-        owner,
-        repo,
-        pull_number: prNumber,
-        commit_id: headSha,
+        ...params,
         body: fallbackBody,
         comments: [],
       });

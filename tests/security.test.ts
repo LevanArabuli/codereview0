@@ -270,19 +270,18 @@ describe('API - API Safety', () => {
     }
   });
 
-  it('createReview call does NOT pass an event parameter (stays PENDING)', () => {
+  it('createReview only ever passes event: "COMMENT" -- never APPROVE, REQUEST_CHANGES, or DISMISS', () => {
     const source = readFileSync(join(SRC_DIR, 'github.ts'), 'utf-8');
 
-    // Find the createReview call blocks and verify none contain 'event:'
-    // The createReview calls pass an object literal. Ensure no `event:` property.
-    const createReviewBlocks = source.split('createReview(');
-    // Skip the first split part (before the first createReview call)
-    for (let i = 1; i < createReviewBlocks.length; i++) {
-      const block = createReviewBlocks[i];
-      // Take content up to the closing of the object (within reasonable bounds)
-      const objectContent = block.slice(0, 500);
-      expect(objectContent).not.toMatch(/\bevent\s*:/);
-    }
+    // The function signature's event parameter type must be narrowed to 'COMMENT'
+    // (TypeScript prevents callers from passing other values at compile time).
+    expect(source).toMatch(/event\?\s*:\s*['"]COMMENT['"]/);
+
+    // Dangerous event values must never appear as string literals anywhere
+    // in github.ts (in code, comments, or doc strings).
+    expect(source).not.toMatch(/['"]APPROVE['"]/);
+    expect(source).not.toMatch(/['"]REQUEST_CHANGES['"]/);
+    expect(source).not.toMatch(/['"]DISMISS['"]/);
   });
 
   it('agentic prompt contains security guardrails blocking destructive operations', () => {

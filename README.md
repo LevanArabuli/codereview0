@@ -68,7 +68,7 @@ codereview https://github.com/owner/repo/pull/123 --mode strict
 codereview https://github.com/owner/repo/pull/123 --model sonnet
 ```
 
-> **Note:** `--post` creates *pending* reviews on GitHub. Nothing goes live until you submit them through the GitHub UI.
+> **Note:** `--post` defaults to creating *pending* reviews — visible only to you, submitted manually through the GitHub UI. Add `--submit` to publish the review immediately as a neutral (`COMMENT` event) review with no approve/reject verdict.
 
 ## Reviewing local branches
 
@@ -116,7 +116,7 @@ Run `codereview` automatically on any PR by commenting `/review` (or `/review de
 
 ### What it does
 
-Opens or updates a **pending** review on the PR with inline findings. You still submit the review manually through the GitHub UI — `codereview` never approves, requests changes, or merges anything.
+Posts a review on the PR with inline findings. By default the Action submits the review as a `COMMENT`-event review (no approve/reject verdict — same shape as a regular PR review with comments), visible to everyone immediately. Set `submit: false` to leave it as a PENDING draft instead. `codereview` never approves, requests changes, dismisses, or merges anything — the type signature blocks those events at compile time.
 
 ### Action inputs
 
@@ -130,6 +130,7 @@ Opens or updates a **pending** review on the PR with inline findings. You still 
 | `review_mode` | no | `balanced` | `strict`, `detailed`, `balanced`, or `lenient` |
 | `model` | no | (CLI default) | e.g. `sonnet`, `opus`, `haiku`, or a provider-specific model ID |
 | `github_token` | no | `${{ github.token }}` | Needs `pull-requests: write` |
+| `submit` | no | `true` | When `true`, submits the review (event=COMMENT) so everyone sees it. When `false`, leaves a PENDING draft (invisible to humans in CI since the token belongs to `github-actions[bot]`). |
 | `claude_code_version` | no | `latest` | `@anthropic-ai/claude-code` version to install |
 
 \* Pass either `anthropic_api_key` or `anthropic_auth_token` — the action fails fast if both are empty.
@@ -180,7 +181,8 @@ The example workflow only runs when the commenter's `author_association` is `OWN
 
 | Flag | Description |
 | --- | --- |
-| `--post` | Post review as GitHub PR comments (created as pending) |
+| `--post` | Post review to the PR (defaults to PENDING/draft) |
+| `--submit` | When combined with `--post`, submits the review immediately (event=COMMENT) instead of leaving it as a draft |
 
 ## Review modes
 
