@@ -39,6 +39,7 @@ interface ReviewOptions {
   quick?: boolean;
   deep?: boolean;
   post?: boolean;
+  submit?: boolean;
   html?: boolean;
   model?: string;
   mode: ReviewMode;
@@ -105,6 +106,7 @@ async function handlePostAnalysis(
         prData.headSha,
         reviewBody,
         comments,
+        options.submit ? 'COMMENT' : undefined,
       );
 
       printProgressDone();
@@ -181,6 +183,7 @@ program
 addSharedOptions(program)
   .argument('<pr-url>', 'GitHub Pull Request URL')
   .option('--post', 'Post review to GitHub PR')
+  .option('--submit', 'Submit the review immediately (event=COMMENT) instead of leaving it as a PENDING draft. Use this in CI where the bot identity makes drafts invisible to humans.')
   .action(async (prUrl: string, options: ReviewOptions) => {
     const failures = checkPrerequisites();
     if (failures.length > 0) {

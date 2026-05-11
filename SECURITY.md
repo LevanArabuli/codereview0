@@ -42,7 +42,7 @@ The primary threat is a malicious PR author who crafts PR content (branch names,
 - **Read-only Octokit surface**: The tool uses only three Octokit methods:
   - `pulls.get` -- read-only PR metadata and diff
   - `pulls.listFiles` -- read-only file list
-  - `pulls.createReview` -- creates a **PENDING** review (the `event` parameter is omitted, which creates a draft that the user must manually submit through the GitHub UI)
+  - `pulls.createReview` -- creates a review. Defaults to **PENDING** (the `event` parameter is omitted, leaving a draft the user submits manually). When invoked with `--submit`, passes `event: 'COMMENT'` to submit immediately (visible to all PR participants, no approve/reject verdict). The function signature's type narrowing prevents passing `APPROVE`, `REQUEST_CHANGES`, or `DISMISS` at compile time.
 - **No destructive API calls**: The tool never calls any Octokit method that approves, merges, closes, or deletes anything.
 - **Safe `gh` CLI usage**: The tool invokes `gh` only for:
   - `gh auth token` -- retrieves the authentication token
@@ -57,7 +57,7 @@ The primary threat is a malicious PR author who crafts PR content (branch names,
 |-----------|---------------|--------------|-------|
 | Octokit | `pulls.get` | Read | PR metadata + diff |
 | Octokit | `pulls.listFiles` | Read | Changed file list |
-| Octokit | `pulls.createReview` | Write (PENDING) | No `event` param = draft review, user submits manually |
+| Octokit | `pulls.createReview` | Write (PENDING or COMMENT) | Defaults to PENDING (no `event`). With `--submit`, passes `event: 'COMMENT'`. Type signature blocks APPROVE/REQUEST_CHANGES/DISMISS. |
 | gh CLI | `gh auth token` | Read | Token retrieval for Octokit |
 | gh CLI | `gh auth status` | Read | Prerequisite check |
 | gh CLI | `gh repo clone` | Read | Shallow clone of PR branch |

@@ -34,9 +34,13 @@ inputs:
     required: false
     default: 'balanced'
   github_token:
-    description: 'GitHub token used to fetch the PR and post the pending review. Needs pull-requests:write.'
+    description: 'GitHub token used to fetch the PR and post the review. Needs pull-requests:write.'
     required: false
     default: ${{ github.token }}
+  submit:
+    description: 'When "true" (default), submit the review immediately so all PR participants can see it. When "false", leaves the review as a PENDING draft -- but in CI the draft is invisible to humans because it is authored by github-actions[bot].'
+    required: false
+    default: 'true'
   claude_code_version:
     description: 'Version (or dist-tag) of @anthropic-ai/claude-code to install globally.'
     required: false
@@ -52,6 +56,7 @@ runs:
         REVIEW_MODE: ${{ inputs.review_mode }}
         API_KEY: ${{ inputs.anthropic_api_key }}
         AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
+        SUBMIT: ${{ inputs.submit }}
       run: |
         case "$MODE" in
           quick|deep) ;;
@@ -60,6 +65,10 @@ runs:
         case "$REVIEW_MODE" in
           strict|detailed|balanced|lenient) ;;
           *) echo "::error::Invalid review_mode '$REVIEW_MODE' (expected strict|detailed|balanced|lenient)"; exit 1 ;;
+        esac
+        case "$SUBMIT" in
+          true|false) ;;
+          *) echo "::error::Invalid submit '$SUBMIT' (expected 'true' or 'false')"; exit 1 ;;
         esac
         if [ -z "$API_KEY" ] && [ -z "$AUTH_TOKEN" ]; then
           echo "::error::Either 'anthropic_api_key' or 'anthropic_auth_token' must be set. The host repo likely needs an ANTHROPIC_API_KEY secret (or equivalent) added under Settings -> Secrets and variables -> Actions."
@@ -99,10 +108,14 @@ runs:
         MODE: ${{ inputs.mode }}
         REVIEW_MODE: ${{ inputs.review_mode }}
         MODEL: ${{ inputs.model }}
+        SUBMIT: ${{ inputs.submit }}
       run: |
         args=("$PR_URL" --post "--$MODE" --mode "$REVIEW_MODE")
         if [ -n "$MODEL" ]; then
           args+=(--model "$MODEL")
+        fi
+        if [ "$SUBMIT" = "true" ]; then
+          args+=(--submit)
         fi
         # Pipe "n" to stdin so deep mode's interactive cleanup prompt resolves
         # immediately (the runner has no TTY, so without input rl.question
