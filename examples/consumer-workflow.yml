@@ -1,0 +1,80 @@
+# Copy this file to .github/workflows/codereview.yml in the repo where you want
+# automated PR reviews. Then add ANTHROPIC_API_KEY to the repo's secrets.
+#
+# Triggers:
+#   /review        - quick review (diff only)
+#   /review deep   - deep review (clones repo, agentic cross-file analysis)
+
+name: codereview
+
+on:
+  issue_comment:
+    types: [created]
+
+# Cancel an in-flight review if the same PR receives a new /review comment.
+concurrency:
+  group: codereview-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Only run on PR comments that start with "/review", AND only when the
+    # commenter has write-equivalent access. Without this gate, anyone with a
+    # GitHub account could drain your ANTHROPIC_API_KEY by commenting on a
+    # public PR. On a private repo where every commenter is already trusted,
+    # you can drop the author_association check.
+    if: >-
+      github.event.issue.pull_request != null &&
+      startsWith(github.event.comment.body, '/review') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write   # post the pending review
+      issues: read           # read the triggering comment
+      contents: read         # checkout in deep mode
+    steps:
+      - name: Parse /review command
+        id: cmd
+        env:
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          mode=quick
+          # Match "/review deep" exactly (word-boundary after "deep" so "/review deeper" stays quick)
+          if [[ "$BODY" =~ ^/review[[:space:]]+deep([[:space:]]|$) ]]; then
+            mode=deep
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+      - name: React to triggering comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'eyes',
+            });
+
+      - name: Run codereview
+        # Pin to a specific tag (e.g. @v1.0.0) or major version (e.g. @v1) in real use.
+        uses: LevanArabuli/codereview0@main
+        with:
+          pr_url: ${{ github.event.issue.pull_request.html_url }}
+          mode: ${{ steps.cmd.outputs.mode }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Optional:
+          # model: sonnet
+          # review_mode: balanced
+
+      - name: React with failure on error
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: '-1',
+            });

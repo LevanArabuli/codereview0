@@ -1,0 +1,95 @@
+name: 'codereview'
+description: 'AI-powered PR code review using Claude. Posts findings as a pending review.'
+author: 'Levan Arabuli'
+branding:
+  icon: 'check-circle'
+  color: 'purple'
+
+inputs:
+  pr_url:
+    description: 'GitHub PR URL to review (e.g. https://github.com/owner/repo/pull/123).'
+    required: true
+  mode:
+    description: 'Review depth: "quick" (diff only) or "deep" (clones repo for cross-file analysis).'
+    required: false
+    default: 'quick'
+  anthropic_api_key:
+    description: 'Anthropic API key for the Claude CLI subprocess.'
+    required: true
+  model:
+    description: 'Claude model override (e.g. sonnet, opus, haiku). Leave empty for the CLI default.'
+    required: false
+    default: ''
+  review_mode:
+    description: 'Review style: strict, detailed, balanced, or lenient.'
+    required: false
+    default: 'balanced'
+  github_token:
+    description: 'GitHub token used to fetch the PR and post the pending review. Needs pull-requests:write.'
+    required: false
+    default: ${{ github.token }}
+  claude_code_version:
+    description: 'Version (or dist-tag) of @anthropic-ai/claude-code to install globally.'
+    required: false
+    default: 'latest'
+
+runs:
+  using: composite
+  steps:
+    - name: Validate inputs
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+        REVIEW_MODE: ${{ inputs.review_mode }}
+      run: |
+        case "$MODE" in
+          quick|deep) ;;
+          *) echo "::error::Invalid mode '$MODE' (expected 'quick' or 'deep')"; exit 1 ;;
+        esac
+        case "$REVIEW_MODE" in
+          strict|detailed|balanced|lenient) ;;
+          *) echo "::error::Invalid review_mode '$REVIEW_MODE' (expected strict|detailed|balanced|lenient)"; exit 1 ;;
+        esac
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'npm'
+        cache-dependency-path: ${{ github.action_path }}/package-lock.json
+
+    - name: Install Claude Code CLI
+      shell: bash
+      env:
+        CC_VERSION: ${{ inputs.claude_code_version }}
+      run: npm install -g "@anthropic-ai/claude-code@${CC_VERSION}"
+
+    - name: Install codereview dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci
+
+    - name: Build codereview
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm run build
+
+    - name: Run codereview
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        PR_URL: ${{ inputs.pr_url }}
+        MODE: ${{ inputs.mode }}
+        REVIEW_MODE: ${{ inputs.review_mode }}
+        MODEL: ${{ inputs.model }}
+      run: |
+        args=("$PR_URL" --post "--$MODE" --mode "$REVIEW_MODE")
+        if [ -n "$MODEL" ]; then
+          args+=(--model "$MODEL")
+        fi
+        # Pipe "n" to stdin so deep mode's interactive cleanup prompt resolves
+        # immediately (the runner has no TTY, so without input rl.question
+        # never resolves and the finally cleanup block is skipped).
+        echo n | node dist/cli.js "${args[@]}"
