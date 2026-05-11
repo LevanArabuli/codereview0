@@ -14,10 +14,19 @@ inputs:
     required: false
     default: 'quick'
   anthropic_api_key:
-    description: 'Anthropic API key for the Claude CLI subprocess.'
-    required: true
+    description: 'Anthropic API key (or compatible provider key). Pass either this OR anthropic_auth_token.'
+    required: false
+    default: ''
+  anthropic_auth_token:
+    description: 'Bearer-style auth token for Anthropic-compatible proxies that use ANTHROPIC_AUTH_TOKEN instead of ANTHROPIC_API_KEY. Pass either this OR anthropic_api_key.'
+    required: false
+    default: ''
+  anthropic_base_url:
+    description: 'Custom Anthropic-compatible API endpoint (e.g. for LiteLLM, OpenRouter, or self-hosted proxies). Leave empty for the official api.anthropic.com.'
+    required: false
+    default: ''
   model:
-    description: 'Claude model override (e.g. sonnet, opus, haiku). Leave empty for the CLI default.'
+    description: 'Claude model override (e.g. sonnet, opus, haiku, or a provider-specific model ID). Leave empty for the CLI default.'
     required: false
     default: ''
   review_mode:
@@ -41,6 +50,8 @@ runs:
       env:
         MODE: ${{ inputs.mode }}
         REVIEW_MODE: ${{ inputs.review_mode }}
+        API_KEY: ${{ inputs.anthropic_api_key }}
+        AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
       run: |
         case "$MODE" in
           quick|deep) ;;
@@ -50,6 +61,10 @@ runs:
           strict|detailed|balanced|lenient) ;;
           *) echo "::error::Invalid review_mode '$REVIEW_MODE' (expected strict|detailed|balanced|lenient)"; exit 1 ;;
         esac
+        if [ -z "$API_KEY" ] && [ -z "$AUTH_TOKEN" ]; then
+          echo "::error::Either 'anthropic_api_key' or 'anthropic_auth_token' must be set. The host repo likely needs an ANTHROPIC_API_KEY secret (or equivalent) added under Settings -> Secrets and variables -> Actions."
+          exit 1
+        fi
 
     - name: Set up Node.js
       uses: actions/setup-node@v4
@@ -78,6 +93,8 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.github_token }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
+        ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
         PR_URL: ${{ inputs.pr_url }}
         MODE: ${{ inputs.mode }}
         REVIEW_MODE: ${{ inputs.review_mode }}

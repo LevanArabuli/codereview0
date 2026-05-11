@@ -66,6 +66,12 @@ jobs:
           # Optional:
           # model: sonnet
           # review_mode: balanced
+          #
+          # Custom Anthropic-compatible provider (LiteLLM, OpenRouter, self-hosted, etc.)
+          # Use either anthropic_api_key OR anthropic_auth_token depending on what your
+          # provider expects. anthropic_base_url overrides the default endpoint.
+          # anthropic_base_url: https://your-proxy.example.com
+          # anthropic_auth_token: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
 
       - name: React with failure on error
         if: failure()

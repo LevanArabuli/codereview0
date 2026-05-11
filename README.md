@@ -123,12 +123,30 @@ Opens or updates a **pending** review on the PR with inline findings. You still 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
 | `pr_url` | yes | — | PR URL to review |
-| `anthropic_api_key` | yes | — | Anthropic API key for the Claude CLI |
+| `anthropic_api_key` | one-of\* | — | Anthropic (or compatible provider) API key |
+| `anthropic_auth_token` | one-of\* | — | Bearer-style token for providers that use `ANTHROPIC_AUTH_TOKEN` |
+| `anthropic_base_url` | no | — | Custom API endpoint (LiteLLM, OpenRouter, self-hosted proxy) |
 | `mode` | no | `quick` | `quick` or `deep` |
 | `review_mode` | no | `balanced` | `strict`, `detailed`, `balanced`, or `lenient` |
-| `model` | no | (CLI default) | e.g. `sonnet`, `opus`, `haiku` |
+| `model` | no | (CLI default) | e.g. `sonnet`, `opus`, `haiku`, or a provider-specific model ID |
 | `github_token` | no | `${{ github.token }}` | Needs `pull-requests: write` |
 | `claude_code_version` | no | `latest` | `@anthropic-ai/claude-code` version to install |
+
+\* Pass either `anthropic_api_key` or `anthropic_auth_token` — the action fails fast if both are empty.
+
+### Custom Anthropic-compatible providers
+
+If you route Claude through a proxy or alternate provider (LiteLLM, OpenRouter, self-hosted gateway), set `anthropic_base_url` to that provider's endpoint and use whichever of `anthropic_api_key` / `anthropic_auth_token` your provider expects. The action passes `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY`, and `ANTHROPIC_AUTH_TOKEN` straight to the Claude CLI subprocess — same env vars Claude Code reads when run locally.
+
+```yaml
+- uses: LevanArabuli/codereview0@v1
+  with:
+    pr_url: ${{ github.event.issue.pull_request.html_url }}
+    mode: ${{ steps.cmd.outputs.mode }}
+    anthropic_base_url: https://your-proxy.example.com
+    anthropic_auth_token: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+    model: your-provider-model-id
+```
 
 ### Required workflow permissions
 
