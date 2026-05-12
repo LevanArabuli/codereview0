@@ -105,27 +105,53 @@ jobs:
           script: |
             const fs = require('fs');
             const path = require('path');
-            let tail = '(no log captured)';
+
+            // Strip ANSI color codes -- picocolors emits them, but they
+            // render as garbage in markdown.
+            const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+
+            let headline = 'See logs for details.';
+            let snippet = '';
             try {
-              const log = fs.readFileSync(
+              const raw = fs.readFileSync(
                 path.join(process.env.RUNNER_TEMP, 'codereview.log'),
                 'utf-8',
               );
-              // Keep the last ~1500 chars so the comment stays readable.
-              tail = log.length > 1500
-                ? '... (truncated) ...\n' + log.slice(-1500)
-                : log;
+              const log = stripAnsi(raw).trimEnd();
+              const lines = log.split('\n');
+
+              // Headline: scan from the END for the most recent line matching
+              // a known error marker. Reverse order so a specific cause (e.g.
+              // "claude CLI exited with code 1: ...") wins over a generic
+              // earlier header ("Analysis failed"). Fall back to the last
+              // non-empty line.
+              const markerRe = /^(✖|Analysis failed|Deep review failed|claude CLI exited|Error[:\s]|Warning:|::error)/i;
+              let markerLine = '';
+              for (let i = lines.length - 1; i >= 0; i--) {
+                if (markerRe.test(lines[i].trim())) {
+                  markerLine = lines[i].trim();
+                  break;
+                }
+              }
+              headline = (markerLine || lines.filter(Boolean).pop() || headline).trim();
+              // Cap headline length so it stays readable in the comment.
+              if (headline.length > 200) headline = headline.slice(0, 200) + '…';
+
+              // Detail: last ~20 lines for context.
+              snippet = lines.slice(-20).join('\n');
             } catch {
-              // log file missing -- action failed before it could be written
+              // log file missing -- action failed before the run step started
+              // (e.g. validation step, npm install). headline stays generic.
             }
+
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const body = [
-              '**codereview failed.**',
+              `**codereview failed:** ${headline}`,
               '',
               '<details><summary>Last output</summary>',
               '',
               '```',
-              tail,
+              snippet || '(no log captured)',
               '```',
               '',
               '</details>',

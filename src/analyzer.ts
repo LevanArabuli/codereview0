@@ -207,7 +207,20 @@ export async function analyzeDiff(prData: PRData, model?: string, mode?: ReviewM
         );
       }
 
-      lastError = error instanceof Error ? error : new Error(String(error));
+      // Build a focused error from the subprocess result.
+      // Node's execFile sets error.message to "Command failed: <full cmd>"
+      // which embeds the entire 1500+ char prompt -- useless in logs and
+      // catastrophic for CI failure comments. Prefer error.stderr (claude's
+      // actual complaint) when present.
+      const errAny = error as { stderr?: string; stdout?: string; code?: number };
+      const stderr = (errAny.stderr ?? '').trim();
+      const code = errAny.code;
+      const message = stderr
+        ? `claude CLI exited with code ${code ?? '?'}: ${stderr.slice(0, 800)}`
+        : error instanceof Error
+          ? error.message.split('\n')[0]
+          : String(error);
+      lastError = new Error(message);
 
       // If this was the first attempt, retry
       if (attempt < MAX_ATTEMPTS - 1) {
