@@ -3,7 +3,7 @@ import pc from 'picocolors';
 import { parsePRUrl } from './url-parser.js';
 import { checkPrerequisites, checkLocalPrerequisites } from './prerequisites.js';
 import { createOctokit, fetchPRData, postReview } from './github.js';
-import { printPRSummary, printErrors, printDebug, printModel, printMode, printMeta, formatDuration, estimateTokens, printProgress, printProgressDone, printAnalysisSummary, printFindings } from './output.js';
+import { printPRSummary, printErrors, printDebug, printModel, printMode, printMeta, printCost, formatDuration, estimateTokens, printProgress, printProgressDone, printAnalysisSummary, printFindings } from './output.js';
 import { buildPrompt, type ReviewMode } from './prompt.js';
 import { analyzeDiff, analyzeAgentic } from './analyzer.js';
 import { cloneRepo, getClonePath, promptCleanup } from './cloner.js';
@@ -140,6 +140,9 @@ async function runQuickReview(
 
     const analyzeDuration = performance.now() - analyzeStart;
     printModel(result.model);
+    if (result.meta) {
+      printCost(result.meta.cost_usd);
+    }
 
     if (options.verbose) {
       printDebug(`Analyze: ${formatDuration(analyzeDuration)}, prompt ${estimateTokens(quickPrompt.length)}`);
@@ -253,6 +256,9 @@ addSharedOptions(program)
         const analyzeDuration = performance.now() - analyzeStart;
         findings = result.findings;
         printModel(result.model);
+        if (result.meta) {
+          printCost(result.meta.cost_usd);
+        }
         if (options.verbose) {
           printDebug(`Analyze (deep): ${formatDuration(analyzeDuration)}`);
           if (result.meta) {
@@ -361,6 +367,9 @@ addSharedOptions(branchCmd)
         const analyzeDuration = performance.now() - analyzeStart;
         findings = result.findings;
         printModel(result.model);
+        if (result.meta) {
+          printCost(result.meta.cost_usd);
+        }
         if (options.verbose) {
           printDebug(`Analyze (deep): ${formatDuration(analyzeDuration)}`);
           if (result.meta) {

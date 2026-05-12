@@ -74,6 +74,16 @@ export function printModel(modelId: string): void {
 }
 
 /**
+ * Print Claude API cost as a dimmed header line.
+ * Always visible (not verbose-only) so CI logs surface spend without --verbose.
+ * Silently skips when cost is 0 or missing (e.g. when the CLI wrapper omits it).
+ */
+export function printCost(costUsd: number): void {
+  if (!costUsd || costUsd <= 0) return;
+  console.log(pc.dim(`Cost: ${formatCost(costUsd)}`));
+}
+
+/**
  * Print operational metadata as [debug] lines.
  * Only call when --verbose is active and meta is available.
  */
