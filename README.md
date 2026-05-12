@@ -9,7 +9,7 @@ Claude-powered reviews for GitHub PRs and local branches. Thorough, configurable
 - 🧠 **Deep mode** - Optionally clones the repo and explores cross-file impacts
 - 💬 **Post to GitHub** - Adds review comments directly on the PR (as pending, so you stay in control)
 - 📄 **HTML reports** - Generates standalone diff reports with inline annotations
-- ⚡ **GitHub Action** - Drop a workflow into any repo and trigger reviews with a `/review` comment
+- ⚡ **GitHub Action** - Drop a workflow into any repo and trigger reviews with a `/codereview` comment
   
 
 <img width="1727" height="1008" alt="codereview output showing annotated diff with findings" src="https://github.com/user-attachments/assets/e91bee0a-2241-43aa-aea0-4fdafa3fae63" />
@@ -98,7 +98,7 @@ The diff uses merge-base semantics (`git diff base...compare`), so results match
 
 ## Use as a GitHub Action
 
-Run `codereview` automatically on any PR by commenting `/review` (or `/review deep`). No local install, no laptop required.
+Run `codereview` automatically on any PR by commenting `/codereview` (or `/codereview deep`). No local install, no laptop required.
 
 ### One-time setup in your repo
 
@@ -154,15 +154,15 @@ If you route Claude through a proxy or alternate provider (LiteLLM, OpenRouter, 
 ```yaml
 permissions:
   pull-requests: write   # post the pending review
-  issues: read           # read the /review comment
+  issues: read           # read the /codereview comment
   contents: read         # checkout in deep mode
 ```
 
 Without `pull-requests: write` the action will fail when posting the review.
 
-### Public repos: gate `/review` to trusted commenters
+### Public repos: gate `/codereview` to trusted commenters
 
-The example workflow only runs when the commenter's `author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR`. Without that gate, anyone with a GitHub account could comment `/review` on your public PR and burn your `ANTHROPIC_API_KEY` credits. On a private repo where every commenter is already trusted, you can drop the check — see the comment in `examples/consumer-workflow.yml`.
+The example workflow only runs when the commenter's `author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR`. Without that gate, anyone with a GitHub account could comment `/codereview` on your public PR and burn your `ANTHROPIC_API_KEY` credits. On a private repo where every commenter is already trusted, you can drop the check — see the comment in `examples/consumer-workflow.yml`.
 
 ## CLI reference
 
