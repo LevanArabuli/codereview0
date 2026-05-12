@@ -58,6 +58,7 @@ jobs:
 
       - name: Run codereview
         # Pin to a specific tag (e.g. @v1.0.0) or major version (e.g. @v1) in real use.
+        id: codereview
         uses: LevanArabuli/codereview0@main
         with:
           pr_url: ${{ github.event.issue.pull_request.html_url }}
@@ -73,6 +74,18 @@ jobs:
           # anthropic_base_url: https://your-proxy.example.com
           # anthropic_auth_token: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
 
+      - name: React with success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: '+1',
+            });
+
       - name: React with failure on error
         if: failure()
         uses: actions/github-script@v7
@@ -83,4 +96,71 @@ jobs:
               repo: context.repo.repo,
               comment_id: context.payload.comment.id,
               content: '-1',
+            });
+
+      - name: Post failure comment
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            // Strip ANSI color codes -- picocolors emits them, but they
+            // render as garbage in markdown.
+            const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+
+            let headline = 'See logs for details.';
+            let snippet = '';
+            try {
+              const raw = fs.readFileSync(
+                path.join(process.env.RUNNER_TEMP, 'codereview.log'),
+                'utf-8',
+              );
+              const log = stripAnsi(raw).trimEnd();
+              const lines = log.split('\n');
+
+              // Headline: scan from the END for the most recent line matching
+              // a known error marker. Reverse order so a specific cause (e.g.
+              // "claude CLI exited with code 1: ...") wins over a generic
+              // earlier header ("Analysis failed"). Fall back to the last
+              // non-empty line.
+              const markerRe = /^(✖|Analysis failed|Deep review failed|claude CLI exited|Error[:\s]|Warning:|::error)/i;
+              let markerLine = '';
+              for (let i = lines.length - 1; i >= 0; i--) {
+                if (markerRe.test(lines[i].trim())) {
+                  markerLine = lines[i].trim();
+                  break;
+                }
+              }
+              headline = (markerLine || lines.filter(Boolean).pop() || headline).trim();
+              // Cap headline length so it stays readable in the comment.
+              if (headline.length > 200) headline = headline.slice(0, 200) + '…';
+
+              // Detail: last ~20 lines for context.
+              snippet = lines.slice(-20).join('\n');
+            } catch {
+              // log file missing -- action failed before the run step started
+              // (e.g. validation step, npm install). headline stays generic.
+            }
+
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `**codereview failed:** ${headline}`,
+              '',
+              '<details><summary>Last output</summary>',
+              '',
+              '```',
+              snippet || '(no log captured)',
+              '```',
+              '',
+              '</details>',
+              '',
+              `[Full logs](${runUrl})`,
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
             });

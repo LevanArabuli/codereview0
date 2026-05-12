@@ -117,7 +117,11 @@ runs:
         if [ "$SUBMIT" = "true" ]; then
           args+=(--submit)
         fi
-        # Pipe "n" to stdin so deep mode's interactive cleanup prompt resolves
-        # immediately (the runner has no TTY, so without input rl.question
-        # never resolves and the finally cleanup block is skipped).
-        echo n | node dist/cli.js "${args[@]}"
+        # Capture combined output to $RUNNER_TEMP/codereview.log so the
+        # consumer workflow's failure step can post a PR comment with the
+        # tail of it. `pipefail` is on by default in GHA bash, so the pipe
+        # preserves the codereview exit status. The CLI already scrubs
+        # secrets from anything it prints (scrubSecrets in src/errors.ts);
+        # we don't re-scrub here. echo n satisfies deep mode's cleanup
+        # prompt (no TTY on the runner).
+        echo n | node dist/cli.js "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/codereview.log"
