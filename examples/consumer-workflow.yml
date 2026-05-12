@@ -2,8 +2,8 @@
 # automated PR reviews. Then add ANTHROPIC_API_KEY to the repo's secrets.
 #
 # Triggers:
-#   /review        - quick review (diff only)
-#   /review deep   - deep review (clones repo, agentic cross-file analysis)
+#   /codereview        - quick review (diff only)
+#   /codereview deep   - deep review (clones repo, agentic cross-file analysis)
 
 name: codereview
 
@@ -11,21 +11,21 @@ on:
   issue_comment:
     types: [created]
 
-# Cancel an in-flight review if the same PR receives a new /review comment.
+# Cancel an in-flight review if the same PR receives a new /codereview comment.
 concurrency:
   group: codereview-${{ github.event.issue.number }}
   cancel-in-progress: true
 
 jobs:
   review:
-    # Only run on PR comments that start with "/review", AND only when the
+    # Only run on PR comments that start with "/codereview", AND only when the
     # commenter has write-equivalent access. Without this gate, anyone with a
     # GitHub account could drain your ANTHROPIC_API_KEY by commenting on a
     # public PR. On a private repo where every commenter is already trusted,
     # you can drop the author_association check.
     if: >-
       github.event.issue.pull_request != null &&
-      startsWith(github.event.comment.body, '/review') &&
+      startsWith(github.event.comment.body, '/codereview') &&
       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
     permissions:
@@ -33,14 +33,14 @@ jobs:
       issues: read           # read the triggering comment
       contents: read         # checkout in deep mode
     steps:
-      - name: Parse /review command
+      - name: Parse /codereview command
         id: cmd
         env:
           BODY: ${{ github.event.comment.body }}
         run: |
           mode=quick
-          # Match "/review deep" exactly (word-boundary after "deep" so "/review deeper" stays quick)
-          if [[ "$BODY" =~ ^/review[[:space:]]+deep([[:space:]]|$) ]]; then
+          # Match "/codereview deep" exactly (word-boundary after "deep" so "/codereview deeper" stays quick)
+          if [[ "$BODY" =~ ^/codereview[[:space:]]+deep([[:space:]]|$) ]]; then
             mode=deep
           fi
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
