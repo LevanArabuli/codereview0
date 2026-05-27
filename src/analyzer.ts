@@ -8,8 +8,8 @@ import { scrubSecrets } from "./errors.js";
 
 const execFile = promisify(execFileCb);
 
-/** Analysis timeout: 5 minutes */
-const ANALYSIS_TIMEOUT_MS = 5 * 60 * 1000;
+/** Analysis timeout: 15 minutes */
+const ANALYSIS_TIMEOUT_MS = 15 * 60 * 1000;
 
 /** Max buffer for Claude CLI output: 10MB */
 const MAX_BUFFER = 10 * 1024 * 1024;
@@ -203,7 +203,7 @@ export async function analyzeDiff(prData: PRData, model?: string, mode?: ReviewM
         (error as NodeJS.ErrnoException & { killed?: boolean }).killed
       ) {
         throw new Error(
-          "Analysis timed out after 5 minutes. The PR diff may be too large for quick review.",
+          "Analysis timed out after 15 minutes. The PR diff may be too large for quick review.",
         );
       }
 
