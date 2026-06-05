@@ -27,8 +27,114 @@ export function createOctokit(): Octokit {
   return new Octokit({ auth: token });
 }
 
+/** listFiles returns at most 100 files per page, capped at 3000 files (30 pages) total. */
+const FILES_PER_PAGE = 100;
+const MAX_FILE_PAGES = 30;
+
+/** Raw listFiles entry fields needed for diff reconstruction. */
+interface RawPRFile {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+  previous_filename?: string;
+}
+
+/**
+ * Fetch every changed file in a PR, following pagination.
+ *
+ * A single listFiles call returns at most 100 files; without this loop, PRs
+ * with more than 100 changed files are silently truncated. GitHub caps the
+ * endpoint at 3000 files (30 pages); beyond that the remainder is unavailable
+ * from this API (the caller detects the shortfall via PR.changed_files).
+ */
+async function fetchAllFiles(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  prNumber: number,
+): Promise<RawPRFile[]> {
+  const all: RawPRFile[] = [];
+  for (let page = 1; page <= MAX_FILE_PAGES; page++) {
+    const response = await octokit.pulls.listFiles({
+      owner,
+      repo,
+      pull_number: prNumber,
+      per_page: FILES_PER_PAGE,
+      page,
+    });
+    const batch = response.data as RawPRFile[];
+    all.push(...batch);
+    if (batch.length < FILES_PER_PAGE) {
+      break;
+    }
+  }
+  return all;
+}
+
+/**
+ * Detect GitHub's "diff too large" rejection. The single-blob diff endpoint
+ * refuses diffs over 20,000 lines with HTTP 406 and a `too_large` code.
+ */
+function isDiffTooLargeError(error: unknown): boolean {
+  const status = (error as { status?: number }).status;
+  const message = (error as { message?: string }).message ?? '';
+  return status === 406 || message.includes('too_large');
+}
+
+/**
+ * Reconstruct a unified diff from the per-file patches returned by listFiles.
+ *
+ * Used as a fallback when the single-blob diff exceeds GitHub's size limit.
+ * Each file's `patch` carries the @@ hunks but not the `diff --git`/`---`/`+++`
+ * headers, so they are synthesized here. Headers reflect the file's status so
+ * downstream parsers (diff-parser, html-diff-parser) classify added/removed/
+ * renamed files correctly. Files whose patch GitHub omitted (binary or oversized)
+ * are kept with a visible note rather than silently dropped.
+ */
+function reconstructDiffFromFiles(files: RawPRFile[]): string {
+  const parts: string[] = [];
+
+  for (const file of files) {
+    const newPath = file.filename;
+    const oldPath = file.previous_filename ?? file.filename;
+    parts.push(`diff --git a/${oldPath} b/${newPath}`);
+
+    if (file.status === 'renamed') {
+      parts.push(`rename from ${oldPath}`);
+      parts.push(`rename to ${newPath}`);
+    }
+
+    if (file.patch !== undefined) {
+      if (file.status === 'added') {
+        parts.push('--- /dev/null', `+++ b/${newPath}`);
+      } else if (file.status === 'removed') {
+        parts.push(`--- a/${oldPath}`, '+++ /dev/null');
+      } else {
+        parts.push(`--- a/${oldPath}`, `+++ b/${newPath}`);
+      }
+      parts.push(file.patch);
+    } else if (file.status !== 'renamed' && file.status !== 'copied' && file.status !== 'unchanged') {
+      // GitHub omits the patch for binary or oversized files. Keep the file
+      // visible (without fabricating a hunk) so the omission is explicit.
+      parts.push(`--- a/${oldPath}`, `+++ b/${newPath}`);
+      parts.push('[patch unavailable from GitHub API: binary file or exceeds per-file diff limit]');
+    }
+  }
+
+  return parts.length > 0 ? parts.join('\n') + '\n' : '';
+}
+
 /**
  * Fetch complete PR data including metadata, file list, and unified diff.
+ *
+ * Metadata, the paginated file list, and the diff are fetched concurrently.
+ * The diff blob is requested separately so that GitHub's too_large rejection
+ * (diffs over 20,000 lines) falls back to reconstructing the diff from the
+ * file patches instead of failing the whole request. Other diff errors still
+ * propagate.
  */
 export async function fetchPRData(
   octokit: Octokit,
@@ -36,35 +142,37 @@ export async function fetchPRData(
   repo: string,
   prNumber: number,
 ): Promise<PRData> {
-  const [prResponse, filesResponse, diffResponse] = await Promise.all([
-    octokit.pulls.get({
-      owner,
-      repo,
-      pull_number: prNumber,
-    }),
-    octokit.pulls.listFiles({
-      owner,
-      repo,
-      pull_number: prNumber,
-      per_page: 100,
-    }),
+  const metadataP = octokit.pulls.get({ owner, repo, pull_number: prNumber });
+  const filesP = fetchAllFiles(octokit, owner, repo, prNumber);
+  const diffP = (
     octokit.pulls.get({
       owner,
       repo,
       pull_number: prNumber,
       mediaType: { format: 'diff' },
-    }) as unknown as { data: string },
-  ]);
+    }) as unknown as Promise<{ data: string }>
+  )
+    .then((response) => ({ ok: true as const, diff: response.data }))
+    .catch((error: unknown) => {
+      if (isDiffTooLargeError(error)) {
+        return { ok: false as const };
+      }
+      throw error;
+    });
+
+  const [prResponse, rawFiles, diffResult] = await Promise.all([metadataP, filesP, diffP]);
 
   const pr = prResponse.data;
 
-  const files: PRFile[] = filesResponse.data.map((f) => ({
+  const files: PRFile[] = rawFiles.map((f) => ({
     filename: f.filename,
     status: f.status,
     additions: f.additions,
     deletions: f.deletions,
     changes: f.changes,
   }));
+
+  const diff = diffResult.ok ? diffResult.diff : reconstructDiffFromFiles(rawFiles);
 
   return {
     number: pr.number,
@@ -80,7 +188,7 @@ export async function fetchPRData(
     deletions: pr.deletions,
     changedFiles: pr.changed_files,
     files,
-    diff: diffResponse.data,
+    diff,
   };
 }
 
