@@ -249,3 +249,53 @@ describe('buildAgenticPrompt', () => {
     expect(prompt).not.toMatch(/file budget/i);
   });
 });
+
+describe('diff truncation', () => {
+  // Builds a unified diff of roughly `targetChars`, ending with a uniquely
+  // named file section so tests can detect whether the tail survived truncation.
+  function makeDiff(targetChars: number, endSentinel: string): string {
+    const sections: string[] = [];
+    let total = 0;
+    let i = 0;
+    while (total < targetChars) {
+      const section =
+        `diff --git a/file${i}.ts b/file${i}.ts\n` +
+        `@@ -1,2 +1,3 @@\n context ${i}\n+padding ${'x'.repeat(200)}\n`;
+      sections.push(section);
+      total += section.length;
+      i++;
+    }
+    sections.push(
+      `diff --git a/${endSentinel}.ts b/${endSentinel}.ts\n@@ -1,1 +1,2 @@\n+${endSentinel}\n`,
+    );
+    return sections.join('');
+  }
+
+  it('includes a 300 KB diff in full (under the limit)', () => {
+    const diff = makeDiff(300_000, 'TAIL_SENTINEL_300K');
+    const prompt = buildPrompt({ ...mockPR, diff });
+    expect(prompt).toContain('TAIL_SENTINEL_300K');
+    expect(prompt).not.toContain('diff truncated');
+  });
+
+  it('includes a 300 KB diff in full for agentic prompts too', () => {
+    const diff = makeDiff(300_000, 'AGENTIC_TAIL_300K');
+    const prompt = buildAgenticPrompt({ ...mockPR, diff });
+    expect(prompt).toContain('AGENTIC_TAIL_300K');
+    expect(prompt).not.toContain('diff truncated');
+  });
+
+  it('includes a ~1 MB diff in full (within the raised limit)', () => {
+    const diff = makeDiff(1_000_000, 'TAIL_SENTINEL_1MB');
+    const prompt = buildPrompt({ ...mockPR, diff });
+    expect(prompt).toContain('TAIL_SENTINEL_1MB');
+    expect(prompt).not.toContain('diff truncated');
+  });
+
+  it('truncates a diff that exceeds the limit', () => {
+    const diff = makeDiff(3_000_000, 'TAIL_SENTINEL_OVER');
+    const prompt = buildPrompt({ ...mockPR, diff });
+    expect(prompt).toContain('diff truncated');
+    expect(prompt).not.toContain('TAIL_SENTINEL_OVER');
+  });
+});

@@ -6,8 +6,15 @@ export const REVIEW_MODES = ['strict', 'detailed', 'lenient', 'balanced'] as con
 /** A review mode that controls the scope and thoroughness of findings */
 export type ReviewMode = typeof REVIEW_MODES[number];
 
-/** Maximum diff size in characters before truncation (~80KB, safe for Claude context window) */
-const MAX_DIFF_CHARS = 80_000;
+/**
+ * Maximum diff size (characters) embedded in a prompt before truncation.
+ * ~2MB is roughly 500K tokens (chars/4) — about half of the 1M-token context
+ * window on Opus/Sonnet 4.x. The remaining headroom is left for the prompt
+ * scaffolding, the model's output, and (in deep mode) agentic file-exploration
+ * context. Sized for coverage over cost; a hard cap remains only so a
+ * pathological multi-MB diff cannot overflow the context window outright.
+ */
+const MAX_DIFF_CHARS = 2_000_000;
 
 /**
  * Truncate a diff to fit within the Claude context window.
