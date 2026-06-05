@@ -219,6 +219,12 @@ addSharedOptions(program)
       printDebug(`Fetch: ${formatDuration(fetchDuration)}`);
     }
 
+    if (prData.files.length < prData.changedFiles) {
+      console.log(pc.yellow(
+        `Warning: GitHub returned ${prData.files.length} of ${prData.changedFiles} changed files (the API caps PR file lists at 3000). Files beyond that are not included in the review.`
+      ));
+    }
+
     printPRSummary(prData);
     printMode(options.mode);
     if (options.verbose) {
