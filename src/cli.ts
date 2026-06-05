@@ -3,9 +3,9 @@ import pc from 'picocolors';
 import { parsePRUrl } from './url-parser.js';
 import { checkPrerequisites, checkLocalPrerequisites } from './prerequisites.js';
 import { createOctokit, fetchPRData, postReview } from './github.js';
-import { printPRSummary, printErrors, printDebug, printModel, printMode, printMeta, printCost, formatDuration, estimateTokens, printProgress, printProgressDone, printAnalysisSummary, printFindings } from './output.js';
-import { buildPrompt, type ReviewMode } from './prompt.js';
-import { analyzeDiff, analyzeAgentic } from './analyzer.js';
+import { printPRSummary, printErrors, printDebug, printModel, printMode, printMeta, printCost, formatDuration, printProgress, printProgressDone, printAnalysisSummary, printFindings } from './output.js';
+import type { ReviewMode } from './prompt.js';
+import { analyzeDiffChunked, analyzeAgentic } from './analyzer.js';
 import { cloneRepo, getClonePath, promptCleanup } from './cloner.js';
 import { parseDiffHunks } from './diff-parser.js';
 import { partitionFindings, buildReviewBody } from './review-builder.js';
@@ -131,11 +131,10 @@ async function runQuickReview(
   prData: PRData,
   options: ReviewOptions,
 ): Promise<ReviewFinding[]> {
-  const quickPrompt = buildPrompt(prData, options.mode);
   const analyzeStart = performance.now();
   try {
     printProgress('Analyzing diff...');
-    const result = await analyzeDiff(prData, options.model, options.mode);
+    const result = await analyzeDiffChunked(prData, options.model, options.mode);
     printProgressDone();
 
     const analyzeDuration = performance.now() - analyzeStart;
@@ -144,8 +143,22 @@ async function runQuickReview(
       printCost(result.meta.cost_usd);
     }
 
+    if (result.chunkCount > 1 || result.skippedFiles > 0) {
+      const parts: string[] = [];
+      if (result.chunkCount > 1) parts.push(`${result.chunkCount} chunks`);
+      if (result.skippedFiles > 0) {
+        parts.push(`${result.skippedFiles} noise file${result.skippedFiles === 1 ? '' : 's'} skipped`);
+      }
+      console.log(pc.dim(`Reviewed in ${parts.join(', ')}.`));
+    }
+    if (result.failedChunks > 0) {
+      console.log(pc.yellow(
+        `Warning: ${result.failedChunks} of ${result.chunkCount} review chunks failed to analyze; findings are partial.`,
+      ));
+    }
+
     if (options.verbose) {
-      printDebug(`Analyze: ${formatDuration(analyzeDuration)}, prompt ${estimateTokens(quickPrompt.length)}`);
+      printDebug(`Analyze: ${formatDuration(analyzeDuration)}, ${result.chunkCount} chunk(s)`);
     }
     return result.findings;
   } catch (error: unknown) {

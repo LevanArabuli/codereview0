@@ -2,6 +2,7 @@ import { execFile as execFileCb, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { ReviewResultSchema } from "./schemas.js";
 import { buildPrompt, buildAgenticPrompt, type ReviewMode } from "./prompt.js";
+import { splitDiffIntoChunks } from "./diff-chunker.js";
 import type { PRData } from "./types.js";
 import type { ReviewFinding } from "./schemas.js";
 import { scrubSecrets } from "./errors.js";
@@ -16,6 +17,17 @@ const MAX_BUFFER = 10 * 1024 * 1024;
 
 /** Max number of analysis attempts (1 initial + 1 retry) */
 const MAX_ATTEMPTS = 2;
+
+/**
+ * Target diff size per chunk (~25k tokens at ~4 chars/token). A single LLM call
+ * over a very large diff dilutes attention and surfaces only the few most
+ * salient issues; splitting the diff into focused chunks restores per-file
+ * coverage. Small PRs stay a single chunk (no extra calls).
+ */
+const CHUNK_TARGET_CHARS = 100_000;
+
+/** Max concurrent chunk analyses (kept modest -- reviews may route via a proxy). */
+const CHUNK_CONCURRENCY = 4;
 
 const MAX_ANALYSIS_TURNS = 10;
 
@@ -236,6 +248,108 @@ export async function analyzeDiff(prData: PRData, model?: string, mode?: ReviewM
 
   // Both attempts failed -- throw the last error
   throw lastError ?? new Error("Analysis failed");
+}
+
+/** Result of a chunked review, with coverage info for the caller to surface. */
+export interface ChunkedAnalysisResult extends AnalysisResult {
+  /** Number of chunks the diff was reviewed in (1 for small PRs). */
+  chunkCount: number;
+  /** Chunks whose analysis failed (review is partial when > 0). */
+  failedChunks: number;
+  /** Noise files (lockfiles, generated output) excluded from review. */
+  skippedFiles: number;
+}
+
+/** Run an async task over items with a bounded number running concurrently. */
+async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+/**
+ * Analyze a PR diff by splitting it into focused chunks reviewed in parallel,
+ * then merging the findings. This is the scalable path behind quick review: a
+ * single call over a 250k-token diff under-reports badly, while per-chunk
+ * reviews restore coverage. A PR small enough to fit one chunk costs exactly
+ * one call -- identical to a plain `analyzeDiff`.
+ *
+ * Noise files (lockfiles, generated output) are excluded up front. Chunk
+ * failures are tolerated: the review is returned partial (with `failedChunks`
+ * set) unless every chunk fails, in which case the first error propagates.
+ *
+ * @param analyze Single-chunk analyzer; injectable for testing. Defaults to `analyzeDiff`.
+ */
+export async function analyzeDiffChunked(
+  prData: PRData,
+  model?: string,
+  mode?: ReviewMode,
+  analyze: (pr: PRData, model?: string, mode?: ReviewMode) => Promise<AnalysisResult> = analyzeDiff,
+): Promise<ChunkedAnalysisResult> {
+  const { chunks, skipped } = splitDiffIntoChunks(prData.diff, prData.files, CHUNK_TARGET_CHARS);
+
+  if (chunks.length === 0) {
+    // Every changed file was noise (e.g. a pure lockfile bump).
+    return {
+      findings: [],
+      model: model ?? 'unknown',
+      chunkCount: 0,
+      failedChunks: 0,
+      skippedFiles: skipped.length,
+    };
+  }
+
+  const outcomes = await runWithConcurrency(chunks, CHUNK_CONCURRENCY, async (chunk) => {
+    const chunkPR: PRData = {
+      ...prData,
+      diff: chunk.diff,
+      files: chunk.files,
+      changedFiles: chunk.files.length,
+      additions: chunk.files.reduce((n, f) => n + f.additions, 0),
+      deletions: chunk.files.reduce((n, f) => n + f.deletions, 0),
+    };
+    try {
+      return { ok: true as const, result: await analyze(chunkPR, model, mode) };
+    } catch (error: unknown) {
+      return { ok: false as const, error };
+    }
+  });
+
+  const succeeded = outcomes.flatMap((o) => (o.ok ? [o.result] : []));
+  const failedChunks = outcomes.length - succeeded.length;
+
+  if (succeeded.length === 0) {
+    const firstError = outcomes.find((o) => !o.ok)?.error;
+    throw firstError instanceof Error ? firstError : new Error('All review chunks failed');
+  }
+
+  const mergedMeta: AnalysisMeta = {
+    cost_usd: succeeded.reduce((n, r) => n + (r.meta?.cost_usd ?? 0), 0),
+    duration_ms: Math.max(0, ...succeeded.map((r) => r.meta?.duration_ms ?? 0)),
+    num_turns: succeeded.reduce((n, r) => n + (r.meta?.num_turns ?? 0), 0),
+    duration_api_ms: succeeded.reduce((n, r) => n + (r.meta?.duration_api_ms ?? 0), 0),
+    session_id: succeeded[0].meta?.session_id ?? '',
+  };
+
+  return {
+    findings: succeeded.flatMap((r) => r.findings),
+    model: succeeded[0].model,
+    meta: mergedMeta,
+    chunkCount: chunks.length,
+    failedChunks,
+    skippedFiles: skipped.length,
+  };
 }
 
 /**
