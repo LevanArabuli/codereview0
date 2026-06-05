@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { PRData } from '../src/types.js';
 
-// Mock child for stdin.end()
-const mockChild = { stdin: { end: vi.fn() } };
+// Mock child for stdin (prompt is written here, then ended)
+const mockChild = { stdin: { write: vi.fn(), end: vi.fn(), on: vi.fn() } };
 const mockExecFile = vi.fn();
 
 // Make promisify return the mock directly so .child is accessible
@@ -61,7 +61,24 @@ function mockExecFileReturn(wrapper: Record<string, unknown>) {
 describe('analyzeDiff', () => {
   beforeEach(() => {
     mockExecFile.mockClear();
+    mockChild.stdin.write.mockClear();
     mockChild.stdin.end.mockClear();
+  });
+
+  it('sends the prompt via stdin, not argv (a large diff in argv overflows ARG_MAX -> E2BIG)', async () => {
+    mockExecFileReturn(buildWrapper());
+
+    await analyzeDiff(mockPR);
+
+    const [cmd, args] = mockExecFile.mock.calls[0] as [string, string[]];
+    expect(cmd).toBe('claude');
+    // The prompt must NOT be an argv element -- that is what overflows ARG_MAX.
+    const promptInArgv = args.some((a) => typeof a === 'string' && a.includes('reviewing a pull request'));
+    expect(promptInArgv).toBe(false);
+    // It must be written to the child's stdin and the stream closed.
+    expect(mockChild.stdin.write).toHaveBeenCalledTimes(1);
+    expect(mockChild.stdin.write.mock.calls[0][0]).toContain('reviewing a pull request');
+    expect(mockChild.stdin.end).toHaveBeenCalled();
   });
 
   it('reads total_cost_usd from wrapper into meta.cost_usd', async () => {

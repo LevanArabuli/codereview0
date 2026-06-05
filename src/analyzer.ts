@@ -159,7 +159,6 @@ export async function analyzeDiff(prData: PRData, model?: string, mode?: ReviewM
     try {
       const args = [
         "-p",
-        prompt,
         "--output-format",
         "json",
         "--max-turns",
@@ -177,6 +176,12 @@ export async function analyzeDiff(prData: PRData, model?: string, mode?: ReviewM
           encoding: "utf-8",
         },
       );
+      // Send the prompt via stdin, not argv. A large diff embedded in the
+      // prompt can exceed the OS argument-length limit (ARG_MAX, ~1MB on
+      // macOS, counting argv + the whole environment) and fail with E2BIG
+      // before claude even starts. stdin has no such limit.
+      p.child.stdin?.on("error", () => { /* ignore EPIPE if claude exits before reading stdin */ });
+      p.child.stdin?.write(prompt);
       p.child.stdin?.end();
       const { stdout } = await p;
 
@@ -276,7 +281,7 @@ export async function analyzeAgentic(
   const prompt = buildAgenticPrompt(prData, mode);
 
   const args = [
-    '-p', prompt,
+    '-p',
     '--output-format', 'stream-json',
     '--verbose',
     '--max-turns', String(MAX_AGENTIC_TURNS),
@@ -292,6 +297,12 @@ export async function analyzeAgentic(
       env: filterEnv(),
     });
 
+    // Send the prompt via stdin, not argv. A large diff embedded in the prompt
+    // can exceed the OS argument-length limit (ARG_MAX, ~1MB on macOS, counting
+    // argv + the whole environment) and fail with E2BIG before claude even
+    // starts. stdin has no such limit.
+    child.stdin?.on('error', () => { /* ignore EPIPE if claude exits before reading stdin */ });
+    child.stdin?.write(prompt);
     child.stdin?.end();
 
     // Accumulate stdout for JSON parsing
