@@ -15,7 +15,7 @@ vi.mock('node:child_process', () => ({
   spawn: vi.fn(),
 }));
 
-const { analyzeDiff } = await import('../src/analyzer.js');
+const { analyzeDiff, analyzeDiffChunked } = await import('../src/analyzer.js');
 
 /** Minimal PRData for testing */
 const mockPR: PRData = {
@@ -164,5 +164,120 @@ describe('analyzeDiff', () => {
 
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0].description).toBe('Missing null check');
+  });
+});
+
+describe('analyzeDiffChunked', () => {
+  function prFile(filename: string) {
+    return { filename, status: 'modified', additions: 1, deletions: 0, changes: 1 };
+  }
+
+  /** One file's diff section, padded to `chars` so chunking boundaries are predictable. */
+  function section(path: string, chars: number) {
+    return `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1,1 +1,2 @@\n context\n+${'x'.repeat(chars)}`;
+  }
+
+  function finding(file: string) {
+    return {
+      file,
+      line: 1,
+      severity: 'bug' as const,
+      confidence: 'high' as const,
+      category: 'logic',
+      description: `issue in ${file}`,
+    };
+  }
+
+  function metaWith(cost: number) {
+    return { cost_usd: cost, duration_ms: 10, num_turns: 1, duration_api_ms: 5, session_id: 's' };
+  }
+
+  /** A PR whose diff (4 files x ~40k chars) splits into multiple ~100k-char chunks. */
+  function chunkingPR(): PRData {
+    const files = Array.from({ length: 4 }, (_, i) => prFile(`src/f${i}.ts`));
+    const diff = files.map((f) => section(f.filename, 40_000)).join('\n') + '\n';
+    return { ...mockPR, files, changedFiles: files.length, diff };
+  }
+
+  it('splits a large diff into multiple chunks and merges all findings', async () => {
+    const prData = chunkingPR();
+    const analyze = async (pr: PRData) => ({
+      findings: pr.files.map((f) => finding(f.filename)),
+      model: 'claude-opus-4-8',
+      meta: metaWith(1),
+    });
+
+    const result = await analyzeDiffChunked(prData, undefined, undefined, analyze);
+
+    expect(result.chunkCount).toBeGreaterThan(1);
+    expect(result.findings).toHaveLength(4); // one per file, across all chunks
+    expect(result.findings.map((f) => f.file).sort()).toEqual(
+      ['src/f0.ts', 'src/f1.ts', 'src/f2.ts', 'src/f3.ts'],
+    );
+  });
+
+  it('sums cost across chunks', async () => {
+    const prData = chunkingPR();
+    const analyze = async () => ({ findings: [], model: 'm', meta: metaWith(1.5) });
+
+    const result = await analyzeDiffChunked(prData, undefined, undefined, analyze);
+
+    expect(result.meta!.cost_usd).toBeCloseTo(1.5 * result.chunkCount);
+  });
+
+  it('tolerates a failing chunk and returns partial findings', async () => {
+    const prData = chunkingPR();
+    const analyze = async (pr: PRData) => {
+      if (pr.files.some((f) => f.filename === 'src/f3.ts')) throw new Error('chunk boom');
+      return { findings: pr.files.map((f) => finding(f.filename)), model: 'm', meta: metaWith(1) };
+    };
+
+    const result = await analyzeDiffChunked(prData, undefined, undefined, analyze);
+
+    expect(result.failedChunks).toBe(1);
+    expect(result.findings.length).toBeGreaterThan(0);
+    expect(result.findings.map((f) => f.file)).not.toContain('src/f3.ts');
+  });
+
+  it('throws when every chunk fails', async () => {
+    const prData = chunkingPR();
+    const analyze = async () => {
+      throw new Error('all boom');
+    };
+
+    await expect(analyzeDiffChunked(prData, undefined, undefined, analyze)).rejects.toThrow();
+  });
+
+  it('reports noise files as skipped and does not review them', async () => {
+    const reviewed: string[] = [];
+    const prData: PRData = {
+      ...mockPR,
+      files: [prFile('yarn.lock'), prFile('src/a.ts')],
+      changedFiles: 2,
+      diff: [section('yarn.lock', 100), section('src/a.ts', 100)].join('\n') + '\n',
+    };
+    const analyze = async (pr: PRData) => {
+      reviewed.push(...pr.files.map((f) => f.filename));
+      return { findings: [], model: 'm', meta: metaWith(1) };
+    };
+
+    const result = await analyzeDiffChunked(prData, undefined, undefined, analyze);
+
+    expect(result.skippedFiles).toBe(1);
+    expect(reviewed).toContain('src/a.ts');
+    expect(reviewed).not.toContain('yarn.lock');
+  });
+
+  it('reviews a small diff as a single chunk', async () => {
+    let calls = 0;
+    const analyze = async () => {
+      calls++;
+      return { findings: [], model: 'm', meta: metaWith(1) };
+    };
+
+    const result = await analyzeDiffChunked(mockPR, undefined, undefined, analyze);
+
+    expect(result.chunkCount).toBe(1);
+    expect(calls).toBe(1);
   });
 });
