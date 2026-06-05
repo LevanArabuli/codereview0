@@ -239,6 +239,36 @@ describe('analyzeDiffChunked', () => {
     expect(result.findings.map((f) => f.file)).not.toContain('src/f3.ts');
   });
 
+  it('surfaces the reason each chunk failed so a partial review is diagnosable', async () => {
+    const prData = chunkingPR();
+    const analyze = async (pr: PRData) => {
+      if (pr.files.some((f) => f.filename === 'src/f3.ts')) {
+        throw new Error('claude CLI exited with code 1: 429 too many requests');
+      }
+      return { findings: pr.files.map((f) => finding(f.filename)), model: 'm', meta: metaWith(1) };
+    };
+
+    const result = await analyzeDiffChunked(prData, undefined, undefined, analyze);
+
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]).toContain('429 too many requests');
+  });
+
+  it('scrubs secrets from surfaced chunk-failure reasons', async () => {
+    const prData = chunkingPR();
+    const analyze = async (pr: PRData) => {
+      if (pr.files.some((f) => f.filename === 'src/f3.ts')) {
+        throw new Error('auth rejected for key sk-ant-abc123SECRET');
+      }
+      return { findings: pr.files.map((f) => finding(f.filename)), model: 'm', meta: metaWith(1) };
+    };
+
+    const result = await analyzeDiffChunked(prData, undefined, undefined, analyze);
+
+    expect(result.failures[0]).not.toContain('sk-ant-abc123SECRET');
+    expect(result.failures[0]).toContain('[REDACTED]');
+  });
+
   it('throws when every chunk fails', async () => {
     const prData = chunkingPR();
     const analyze = async () => {
