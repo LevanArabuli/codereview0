@@ -155,6 +155,12 @@ async function runQuickReview(
       console.log(pc.yellow(
         `Warning: ${result.failedChunks} of ${result.chunkCount} review chunks failed to analyze; findings are partial.`,
       ));
+      // Surface why. Without this the warning is undiagnosable: the per-chunk
+      // errors were captured but never shown unless every chunk failed.
+      const reasons = options.verbose ? result.failures : [...new Set(result.failures)];
+      for (const reason of reasons) {
+        console.error(pc.dim('  - ' + reason));
+      }
     }
 
     if (options.verbose) {

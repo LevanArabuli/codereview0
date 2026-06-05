@@ -256,6 +256,8 @@ export interface ChunkedAnalysisResult extends AnalysisResult {
   chunkCount: number;
   /** Chunks whose analysis failed (review is partial when > 0). */
   failedChunks: number;
+  /** Scrubbed failure reason per failed chunk, so a partial review is diagnosable. */
+  failures: string[];
   /** Noise files (lockfiles, generated output) excluded from review. */
   skippedFiles: number;
 }
@@ -306,6 +308,7 @@ export async function analyzeDiffChunked(
       model: model ?? 'unknown',
       chunkCount: 0,
       failedChunks: 0,
+      failures: [],
       skippedFiles: skipped.length,
     };
   }
@@ -327,7 +330,10 @@ export async function analyzeDiffChunked(
   });
 
   const succeeded = outcomes.flatMap((o) => (o.ok ? [o.result] : []));
-  const failedChunks = outcomes.length - succeeded.length;
+  const failures = outcomes.flatMap((o) =>
+    o.ok ? [] : [scrubSecrets(o.error instanceof Error ? o.error.message : String(o.error))],
+  );
+  const failedChunks = failures.length;
 
   if (succeeded.length === 0) {
     const firstError = outcomes.find((o) => !o.ok)?.error;
@@ -348,6 +354,7 @@ export async function analyzeDiffChunked(
     meta: mergedMeta,
     chunkCount: chunks.length,
     failedChunks,
+    failures,
     skippedFiles: skipped.length,
   };
 }
